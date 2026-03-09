@@ -17,12 +17,16 @@
       "prod": {
         "base_url": "https://jira.corp.com",
         "username": "admin",
-        "token": "${JIRA_PROD_TOKEN}"
+        "token": "${JIRA_PROD_TOKEN}",
+        "api_version": "2",
+        "default_project": "PROJ"
       },
       "dev": {
         "base_url": "https://jira-dev.corp.com",
         "username": "admin",
-        "token": "${JIRA_DEV_TOKEN}"
+        "token": "${JIRA_DEV_TOKEN}",
+        "api_version": "2",
+        "default_project": "DEV"
       }
     }
   },

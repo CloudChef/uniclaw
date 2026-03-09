@@ -39,3 +39,6 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "integration: marks tests as integration tests"
     )
+    config.addinivalue_line(
+        "markers", "e2e: marks tests as end-to-end tests requiring live services (set JIRA_E2E=1 etc.)"
+    )
