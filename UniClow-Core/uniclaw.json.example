@@ -1,0 +1,57 @@
+{
+  "model": {
+    "primary": "doubao/doubao-seed-1-6-lite-251015",
+    "fallbacks": [],
+    "temperature": 0.7,
+    "providers": {
+      "doubao": {
+        "base_url": "${DOUBAO_BASE_URL}",
+        "api_key": "${DOUBAO_API_KEY}",
+        "api_type": "openai"
+      }
+    }
+  },
+
+  "service_providers": {
+    "jira": {
+      "prod": {
+        "base_url": "https://jira.corp.com",
+        "username": "admin",
+        "token": "${JIRA_PROD_TOKEN}"
+      },
+      "dev": {
+        "base_url": "https://jira-dev.corp.com",
+        "username": "admin",
+        "token": "${JIRA_DEV_TOKEN}"
+      }
+    }
+  },
+
+  "auth": {
+    "provider": "none",
+    "cache_ttl_seconds": 300,
+
+    "smartcmp": {
+      "validate_url": "https://192.168.191.191/platform-api/auth/validate",
+      "api_base_url": "https://192.168.191.191"
+    },
+
+    "oidc": {
+      "issuer": "https://auth.example.com",
+      "client_id": "${OIDC_CLIENT_ID}",
+      "client_secret": "${OIDC_CLIENT_SECRET}",
+      "jwks_uri": "",
+      "scopes": ["openid", "profile", "email"]
+    },
+
+    "api_key": {
+      "keys": {
+        "sk-dev-key-001": { "user_id": "dev-user", "roles": ["admin"] }
+      }
+    },
+
+    "none": {
+      "default_user_id": "default"
+    }
+  }
+}

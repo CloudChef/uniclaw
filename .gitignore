@@ -1,0 +1,13 @@
+node_modules/
+dist/
+openspec/
+.qoder/
+
+*.pyc
+*.pyo
+*.pyd
+
+**/__pycache__/
+
+.env
+nul

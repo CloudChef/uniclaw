@@ -1,0 +1,269 @@
+"""
+
+Configuration manager
+
+implementmulti configurationparse(run > environment variable > > default value)andconfiguration.
+"""
+
+from __future__ import annotations
+
+import os
+import json
+from pathlib import Path
+from typing import Optional, Any
+from pydantic import ValidationError
+
+from app.uniclaw.core.config_schema import UniclawConfig
+
+
+class ConfigManager:
+    """
+
+Configuration manager
+    
+    configuration(from to):
+    1. runtime override(through set())
+    2. environment variable(UNICLAW_* prefix)
+    3. profile(uniclaw.json / uniclaw.yaml)
+    4. default value(config_schema.py in)
+    
+    Example usage:
+        ```python
+        config_manager = ConfigManager()
+        config_manager.load()
+        
+        # getconfiguration
+        timeout = config_manager.config.agent_defaults.timeout_seconds
+        
+        # runtime override
+        config_manager.set("agent_defaults.timeout_seconds", 300)
+        
+        #
+        config_manager.reload()
+        ```
+    
+"""
+    
+    DEFAULT_CONFIG_PATHS = [
+        "uniclaw.json",
+        "uniclaw.yaml",
+        "~/.uniclaw/config.json",
+    ]
+    
+    ENV_PREFIX = "UNICLAW_"
+    
+    def __init__(self, config_path: Optional[str] = None):
+        """
+
+initializeConfiguration manager
+        
+        Args:
+            config_path:configurationfile path(optional)
+        
+"""
+        self._config_path = config_path
+        self._config: UniclawConfig = UniclawConfig()
+        self._runtime_overrides: dict[str, Any] = {}
+        self._loaded = False
+    
+    @property
+    def config(self) -> UniclawConfig:
+        """get configuration"""
+        if not self._loaded:
+            self.load()
+        return self._config
+    
+    def load(self) -> UniclawConfig:
+        """
+
+configuration
+        
+        :default value <- <- environment variable <- runtime override
+        
+        Returns:
+            configuration
+        
+"""
+        # 1. fromdefault valuestart
+        config_dict: dict[str, Any] = {}
+        
+        # 2. from
+        file_config = self._load_from_file()
+        if file_config:
+            config_dict = self._deep_merge(config_dict, file_config)
+        
+        # 3. fromenvironment variable
+        env_config = self._load_from_env()
+        if env_config:
+            config_dict = self._deep_merge(config_dict, env_config)
+        
+        # 4. applyruntime override
+        if self._runtime_overrides:
+            config_dict = self._deep_merge(config_dict, self._runtime_overrides)
+        
+        # 5. createconfiguration
+        try:
+            self._config = UniclawConfig(**config_dict)
+        except ValidationError as e:
+            # configuration usedefault value
+            print(f"[ConfigManager] 配置验证失败，使用默认值: {e}")
+            self._config = UniclawConfig()
+        
+        self._loaded = True
+        return self._config
+    
+    def reload(self) -> UniclawConfig:
+        """configuration"""
+        self._loaded = False
+        return self.load()
+    
+    def set(self, key: str, value: Any) -> None:
+        """
+
+run configuration
+        
+        Args:
+            key:configuration(, such as "agent_defaults.timeout_seconds")
+            value:configuration
+        
+"""
+        self._set_nested(self._runtime_overrides, key.split("."), value)
+        # apply
+        self._loaded = False
+    
+    def get(self, key: str, default: Any = None) -> Any:
+        """
+
+get configuration
+        
+        Args:
+            key:configuration()
+            default:default value
+            
+        Returns:
+            configuration ordefault value
+        
+"""
+        try:
+            obj = self.config
+            for part in key.split("."):
+                if hasattr(obj, part):
+                    obj = getattr(obj, part)
+                elif isinstance(obj, dict) and part in obj:
+                    obj = obj[part]
+                else:
+                    return default
+            return obj
+        except Exception:
+            return default
+    
+    def _load_from_file(self) -> Optional[dict]:
+        """from configuration"""
+        paths = [self._config_path] if self._config_path else self.DEFAULT_CONFIG_PATHS
+        
+        for path_str in paths:
+            if not path_str:
+                continue
+            path = Path(path_str).expanduser()
+            if path.exists():
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        if path.suffix == ".json":
+                            return json.load(f)
+                        elif path.suffix in (".yaml", ".yml"):
+                            # YAML support(optional)
+                            try:
+                                import yaml
+                                return yaml.safe_load(f)
+                            except ImportError:
+                                print(f"[ConfigManager] YAML 支持需要安装 PyYAML")
+                                continue
+                except Exception as e:
+                    print(f"[ConfigManager] 读取配置文件失败 {path}: {e}")
+                    continue
+        return None
+    
+    def _load_from_env(self) -> dict:
+        """
+
+fromenvironment variable configuration
+        
+        environment variableformat:UNICLAW_<PATH>__<KEY>
+        such as:UNICLAW_AGENT_DEFAULTS__TIMEOUT_SECONDS=300
+        
+"""
+        config: dict[str, Any] = {}
+        
+        for key, value in os.environ.items():
+            if not key.startswith(self.ENV_PREFIX):
+                continue
+            
+            # prefix configuration
+            config_key = key[len(self.ENV_PREFIX):].lower()
+            parts = config_key.split("__")
+            
+            # parse type
+            parsed_value = self._parse_env_value(value)
+            
+            # to configurationdictionary
+            self._set_nested(config, parts, parsed_value)
+        
+        return config
+    
+    def _parse_env_value(self, value: str) -> Any:
+        """parseenvironment variable type"""
+        # parse JSON(support type)
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            pass
+        
+        # 
+        if value.lower() in ("true", "yes", "1"):
+            return True
+        if value.lower() in ("false", "no", "0"):
+            return False
+        
+        # count
+        try:
+            if "." in value:
+                return float(value)
+            return int(value)
+        except ValueError:
+            pass
+        
+        # characters
+        return value
+    
+    def _set_nested(self, d: dict, keys: list[str], value: Any) -> None:
+        """at dictionaryin"""
+        for key in keys[:-1]:
+            d = d.setdefault(key, {})
+        d[keys[-1]] = value
+    
+    def _deep_merge(self, base: dict, override: dict) -> dict:
+        """dictionary"""
+        result = base.copy()
+        for key, value in override.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = self._deep_merge(result[key], value)
+            else:
+                result[key] = value
+        return result
+
+
+# Configuration managerinstance
+_config_manager: Optional[ConfigManager] = None
+
+
+def get_config_manager() -> ConfigManager:
+    """get Configuration managerinstance"""
+    global _config_manager
+    if _config_manager is None:
+        _config_manager = ConfigManager()
+    return _config_manager
+
+
+def get_config() -> UniclawConfig:
+    """get configuration"""
+    return get_config_manager().config
