@@ -15,10 +15,11 @@ from typing import Any, TYPE_CHECKING
 from app.uniclaw.tools.base import ToolResult
 
 if TYPE_CHECKING:
-    pass
+    from pydantic_ai import RunContext
+    from app.uniclaw.core.deps import SkillDeps
 
 
-async def list_provider_instances_tool(ctx: Any, provider_type: str) -> dict:
+async def list_provider_instances_tool(ctx: "RunContext[SkillDeps]", provider_type: str) -> dict:
     """
 
 
@@ -68,7 +69,7 @@ Provider type availableinstance
 
 
 async def select_provider_instance_tool(
-    ctx: Any,
+    ctx: "RunContext[SkillDeps]",
     provider_type: str,
     instance_name: str,
 ) -> dict:

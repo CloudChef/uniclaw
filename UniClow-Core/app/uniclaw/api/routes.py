@@ -223,59 +223,57 @@ async def _execute_agent_run(
         # Push start event
         ctx.sse_manager.push_lifecycle(run_id, "start")
         
-        # Check if AgentRunner is available
-        if ctx.agent_runner:
-            # Build per-user scoped SessionManager and MemoryManager.
-            # Per spec §用户专属实例: each request gets managers scoped to
-            # auth_user.user_id, activating per-user path isolation (tasks 9.1/10.1).
-            user_id = _user_info.user_id
-            scoped_session_mgr = SessionManager(
-                agents_dir=str(ctx.session_manager.agents_dir),
-                agent_id=ctx.session_manager.agent_id,
+        # AgentRunner must be configured
+        if not ctx.agent_runner:
+            raise RuntimeError(
+                "AgentRunner not configured. "
+                "Ensure LLM provider is properly configured in uniclaw.json"
+            )
+        
+        # Build per-user scoped SessionManager and MemoryManager.
+        # Per spec §用户专属实例: each request gets managers scoped to
+        # auth_user.user_id, activating per-user path isolation (tasks 9.1/10.1).
+        user_id = _user_info.user_id
+        scoped_session_mgr = SessionManager(
+            agents_dir=str(ctx.session_manager.agents_dir),
+            agent_id=ctx.session_manager.agent_id,
+            user_id=user_id,
+        )
+        scoped_memory_mgr: Optional[MemoryManager] = None
+        if ctx.memory_manager is not None:
+            scoped_memory_mgr = MemoryManager(
+                workspace=str(ctx.memory_manager._workspace),
                 user_id=user_id,
             )
-            scoped_memory_mgr: Optional[MemoryManager] = None
-            if ctx.memory_manager is not None:
-                scoped_memory_mgr = MemoryManager(
-                    workspace=str(ctx.memory_manager._workspace),
-                    user_id=user_id,
-                )
 
-            # Execute with actual AgentRunner
-            deps = SkillDeps(
-                user_info=_user_info,
-                session_key=session_key,
-                session_manager=scoped_session_mgr,
-                memory_manager=scoped_memory_mgr,
-            )
-            
-            async for event in ctx.agent_runner.run(
-                session_key=session_key,
-                user_message=message,
-                deps=deps,
-                timeout_seconds=timeout_seconds
-            ):
-                # Convert StreamEvent to SSE event
-                if event.type == "lifecycle":
-                    ctx.sse_manager.push_lifecycle(run_id, event.phase)
-                elif event.type == "assistant":
-                    ctx.sse_manager.push_assistant(run_id, event.content)
-                elif event.type == "tool":
-                    ctx.sse_manager.push_tool(
-                        run_id, 
-                        event.tool, 
-                        event.phase,
-                        result=event.content if event.content else None
-                    )
-                elif event.type == "error":
-                    ctx.sse_manager.push_error(run_id, event.error)
-        else:
-            # No AgentRunner available, return mock response
-            await asyncio.sleep(0.5)
-            ctx.sse_manager.push_assistant(
-                run_id,
-                f"Received message: {message}\n\nAgentRunner is not configured. Please set agent_runner to enable full functionality."
-            )
+        # Execute with actual AgentRunner
+        deps = SkillDeps(
+            user_info=_user_info,
+            session_key=session_key,
+            session_manager=scoped_session_mgr,
+            memory_manager=scoped_memory_mgr,
+        )
+        
+        async for event in ctx.agent_runner.run(
+            session_key=session_key,
+            user_message=message,
+            deps=deps,
+            timeout_seconds=timeout_seconds
+        ):
+            # Convert StreamEvent to SSE event
+            if event.type == "lifecycle":
+                ctx.sse_manager.push_lifecycle(run_id, event.phase)
+            elif event.type == "assistant":
+                ctx.sse_manager.push_assistant(run_id, event.content)
+            elif event.type == "tool":
+                ctx.sse_manager.push_tool(
+                    run_id, 
+                    event.tool, 
+                    event.phase,
+                    result=event.content if event.content else None
+                )
+            elif event.type == "error":
+                ctx.sse_manager.push_error(run_id, event.error)
         
         # Update run status
         if run_id in ctx.active_runs:
@@ -526,18 +524,29 @@ def create_router() -> APIRouter:
         ctx: APIContext = Depends(get_api_context)
     ) -> dict[str, Any]:
         """available Skills"""
-        snapshot = ctx.skill_registry.snapshot()
-        return {
-            "skills": [
-                {
-                    "name": s.name,
-                    "description": s.description,
-                    "category": s.category,
-                    "tags": s.tags
-                }
-                for s in snapshot
-            ]
-        }
+        # Get executable skills (Python handlers)
+        executable_skills = ctx.skill_registry.snapshot()
+        # Get markdown skills
+        md_skills = ctx.skill_registry.md_snapshot()
+        
+        # Combine both types
+        all_skills = []
+        for s in executable_skills:
+            all_skills.append({
+                "name": s["name"],
+                "description": s["description"],
+                "category": s.get("category", "utility"),
+                "type": "executable"
+            })
+        for s in md_skills:
+            all_skills.append({
+                "name": s["name"],
+                "description": s["description"],
+                "category": s.get("metadata", {}).get("category", "skill"),
+                "type": "markdown"
+            })
+        
+        return {"skills": all_skills}
         
     @router.post("/skills/execute", response_model=SkillExecuteResponse)
     async def execute_skill(

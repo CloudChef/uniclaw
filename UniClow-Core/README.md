@@ -124,31 +124,50 @@ UniClaw uses `uniclaw.json` for configuration. Create a configuration file in th
 ```json
 {
   "model": {
-    "provider": "doubao",
-    "model": "your-model-name",
-    "api_key": "your-api-key",
-    "base_url": "https://ark.cn-beijing.volces.com/api/v3"
-  },
-  "agent_defaults": {
-    "max_retries": 3,
-    "timeout": 30
+    "primary": "kimi/kimi-k2.5",
+    "temperature": 0.7,
+    "providers": {
+      "kimi": {
+        "base_url": "${ANTHROPIC_BASE_URL}",
+        "api_key": "${ANTHROPIC_API_KEY}",
+        "api_type": "anthropic"
+      }
+    }
   }
 }
 ```
 
 Configuration options:
 
-- `model.provider` - LLM provider (doubao, openai, etc.)
-- `model.model` - Model name
-- `model.api_key` - API key for the provider
-- `model.base_url` - Base URL for the API endpoint
+- `model.primary` - Primary model in format `provider/model-name`
+- `model.providers` - Provider configurations with `base_url`, `api_key`, and `api_type`
+- `api_type` - API type: `openai` (default) or `anthropic`
 
-Adjust the configuration to match your LLM provider and SmartCMP environment before running integration flows.
+Environment variables are expanded from `${VAR_NAME}` format. Set them before starting:
+
+```bash
+# For Kimi (Anthropic-compatible API)
+export ANTHROPIC_BASE_URL="https://api.moonshot.cn/anthropic"
+export ANTHROPIC_API_KEY="your-api-key"
+
+# For Doubao (OpenAI-compatible API)
+export DOUBAO_BASE_URL="https://ark.cn-beijing.volces.com/api/v3"
+export DOUBAO_API_KEY="your-api-key"
+```
 
 ### Run Tests
 
 ```bash
+# Run all tests
 pytest tests/uniclaw -q
+
+# Run LLM integration tests (requires API credentials)
+export ANTHROPIC_BASE_URL="https://api.moonshot.cn/anthropic"
+export ANTHROPIC_API_KEY="your-api-key"
+pytest tests/uniclaw/test_agent_integration.py -v -m llm
+
+# Run e2e tests (requires running service)
+pytest tests/uniclaw/test_e2e_api.py -v -m e2e
 ```
 
 ### Start the Service
@@ -156,7 +175,7 @@ pytest tests/uniclaw -q
 Start the backend API server:
 
 ```bash
-uvicorn app.uniclaw.api.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.uniclaw.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 The API will be available at `http://127.0.0.1:8000`.
@@ -201,7 +220,7 @@ npm test
 
 ## Development Notes
 
-- This repository currently exposes the UniClaw core as application modules rather than a single documented `main.py` entrypoint
+- Entry point: `app/uniclaw/main.py` - FastAPI application with lifespan management
 - The API surface lives under `app/uniclaw/api/`
 - Core orchestration logic lives under `app/uniclaw/agent/`, `app/uniclaw/workflow/`, and `app/uniclaw/tools/`
 - Provider integrations can be added under `app/uniclaw/providers/`

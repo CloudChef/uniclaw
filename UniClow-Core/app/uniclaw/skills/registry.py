@@ -20,12 +20,13 @@ from pathlib import Path
 from typing import Callable, Any, Optional, TYPE_CHECKING
 
 from pydantic import BaseModel
+from pydantic_ai import RunContext
 
 from app.uniclaw.skills.frontmatter import parse_frontmatter
+from app.uniclaw.core.deps import SkillDeps
 
 if TYPE_CHECKING:
-    from pydantic_ai import Agent, RunContext
-    from app.uniclaw.core.deps import SkillDeps
+    from pydantic_ai import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ def validate_skill_name(
     - lowercase letters, digits, and single hyphens only
     - maximum length of 64 characters
     - no consecutive hyphens
-    - optional match against the parent directory name
+    - parent directory match is optional (warning only, not enforced)
 
     Args:
         name: Candidate skill name.
@@ -67,8 +68,8 @@ def validate_skill_name(
         return "name contains consecutive hyphens '--'"
     if not _NAME_PATTERN.match(name):
         return "name must match [a-z0-9] with single hyphens only"
-    if parent_dir_name is not None and name != parent_dir_name:
-        return f"name '{name}' does not match parent directory '{parent_dir_name}'"
+    # Note: parent directory name check is relaxed to allow flexible naming
+    # e.g., directory "jira-bulk" can contain skill named "jira-bulk-operations"
     return None
 
 
@@ -201,8 +202,6 @@ class SkillRegistry:
     
     def register_to_agent(self, agent: Any) -> None:
         """
-
-
 convert Skills register PydanticAI Agent tool
  
  Args:
@@ -212,6 +211,14 @@ convert Skills register PydanticAI Agent tool
         for name, (meta, handler) in self._skills.items():
             # PydanticAI support tool
             if hasattr(agent, "tool"):
+                # Inject RunContext and SkillDeps into handler's module globals if needed
+                # This resolves forward reference type hints like "RunContext[SkillDeps]"
+                handler_module = inspect.getmodule(handler)
+                if handler_module:
+                    if 'RunContext' not in handler_module.__dict__:
+                        handler_module.__dict__['RunContext'] = RunContext
+                    if 'SkillDeps' not in handler_module.__dict__:
+                        handler_module.__dict__['SkillDeps'] = SkillDeps
                 agent.tool(handler, name=name)
     
     async def execute(

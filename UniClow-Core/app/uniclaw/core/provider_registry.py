@@ -41,6 +41,8 @@ from typing import Any, Callable, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.uniclaw.skills.registry import SkillRegistry, SkillMetadata
+    from pydantic_ai import RunContext
+    from app.uniclaw.core.deps import SkillDeps
 
 logger = logging.getLogger(__name__)
 
@@ -444,7 +446,7 @@ Handler Wrapper
         registry = self  # 
 
         @functools.wraps(handler)
-        async def wrapper(ctx: Any, **kwargs: Any) -> Any:
+        async def wrapper(ctx: "RunContext[SkillDeps]", **kwargs: Any) -> Any:
             extra = ctx.deps.extra if hasattr(ctx, "deps") and hasattr(ctx.deps, "extra") else {}
 
             # instance
