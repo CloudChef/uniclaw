@@ -6,6 +6,7 @@ openspec/
 *.pyc
 *.pyo
 *.pyd
+.uniclaw-test/
 
 **/__pycache__/
 

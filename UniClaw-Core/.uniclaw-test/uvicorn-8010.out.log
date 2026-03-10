@@ -1,9 +1,0 @@
-[UniClaw] Registered 19 built-in tools
-[UniClaw] Agent created with model: openai:deepseek-chat
-[UniClaw] Application started successfully
-[UniClaw] Session storage: .uniclaw-test\main\sessions\default
-[UniClaw] Skills loaded: 23 executable, 1 markdown
-INFO:     127.0.0.1:56753 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61836 - "POST /api/sessions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61836 - "POST /api/agent/run HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61836 - "GET /api/agent/runs/9731115e-0e31-4796-94b5-95b0eb5194b2/stream HTTP/1.1" 200 OK
