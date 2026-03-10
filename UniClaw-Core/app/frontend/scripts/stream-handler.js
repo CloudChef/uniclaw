@@ -1,7 +1,7 @@
 /**
  * SSE Stream Response Handler
  * Handle streaming events from Agent runs
- * 
+ *
  * Backend SSE event types:
  * - lifecycle: { phase: 'start' | 'end' | 'error' | 'timeout' }
  * - assistant: { text: string, is_delta: boolean }
@@ -32,7 +32,7 @@ export const EventTypes = {
 export function createStreamHandler(runId, callbacks = {}) {
     let eventSource = null;
     let aborted = false;
-    
+
     const {
         onStart = () => {},
         onDelta = () => {},
@@ -41,35 +41,29 @@ export function createStreamHandler(runId, callbacks = {}) {
         onEnd = () => {},
         onError = () => {}
     } = callbacks;
-    
-    /**
-     * Start stream connection
-     */
+
     function start() {
         if (eventSource || aborted) return;
-        
-        // Backend endpoint: /api/agent/runs/{run_id}/stream
+
         const url = buildApiUrl(`/api/agent/runs/${runId}/stream`);
         eventSource = new EventSource(url, { withCredentials: true });
-        
+
         eventSource.onopen = () => {
             console.log('[Stream] Connected:', runId);
         };
-        
+
         eventSource.onerror = (error) => {
             console.error('[Stream] Connection error:', error);
-            // Only call onError when connection completely fails
             if (eventSource && eventSource.readyState === EventSource.CLOSED) {
                 onError({ message: 'Connection closed unexpectedly' });
                 close();
             }
         };
-        
-        // Listen for lifecycle events
+
         eventSource.addEventListener(EventTypes.LIFECYCLE, (e) => {
             const data = parseEventData(e.data);
             console.log('[Stream] Lifecycle:', data.phase);
-            
+
             if (data.phase === 'start') {
                 onStart(data);
             } else if (data.phase === 'end') {
@@ -80,53 +74,44 @@ export function createStreamHandler(runId, callbacks = {}) {
                 close();
             }
         });
-        
-        // Listen for assistant events
+
         eventSource.addEventListener(EventTypes.ASSISTANT, (e) => {
             const data = parseEventData(e.data);
-            // Backend sends { text: string, is_delta: boolean }
             onDelta({ content: data.text, is_delta: data.is_delta });
         });
-        
-        // Listen for tool events
+
         eventSource.addEventListener(EventTypes.TOOL, (e) => {
             const data = parseEventData(e.data);
-            // Backend sends { tool: string, phase: string, result?: string }
             if (data.phase === 'start') {
                 onToolStart({ tool_name: data.tool });
             } else if (data.phase === 'end') {
                 onToolEnd({ tool_name: data.tool, result: data.result });
             }
         });
-        
-        // Listen for error events
+
         eventSource.addEventListener(EventTypes.ERROR, (e) => {
             const data = parseEventData(e.data);
-            onError({ message: data.message, code: data.code });
+            onError({ message: data.message || 'Stream error', code: data.code });
             close();
         });
-        
-        // Listen for heartbeat events (optional, for keeping connection alive)
-        eventSource.addEventListener(EventTypes.HEARTBEAT, (e) => {
+
+        eventSource.addEventListener(EventTypes.HEARTBEAT, () => {
             console.log('[Stream] Heartbeat received');
         });
     }
-    
-    /**
-     * Parse event data
-     */
+
     function parseEventData(data) {
+        if (typeof data !== 'string' || data.length === 0) {
+            return {};
+        }
         try {
             return JSON.parse(data);
         } catch (e) {
             console.warn('[Stream] Failed to parse event data:', data);
-            return { raw: data };
+            return {};
         }
     }
-    
-    /**
-     * Close connection
-     */
+
     function close() {
         if (eventSource) {
             eventSource.close();
@@ -134,16 +119,13 @@ export function createStreamHandler(runId, callbacks = {}) {
             console.log('[Stream] Closed:', runId);
         }
     }
-    
-    /**
-     * Abort stream
-     */
+
     function abort() {
         aborted = true;
         close();
         console.log('[Stream] Aborted:', runId);
     }
-    
+
     return {
         start,
         abort,
@@ -160,10 +142,9 @@ export function createStreamHandler(runId, callbacks = {}) {
  */
 export function streamResponse(runId, onChunk, onComplete) {
     let content = '';
-    
+
     const handler = createStreamHandler(runId, {
         onDelta: (data) => {
-            // Backend sends { content: text, is_delta: boolean }
             if (data.content) {
                 content += data.content;
                 onChunk(data.content, content);
@@ -177,7 +158,7 @@ export function streamResponse(runId, onChunk, onComplete) {
             onComplete(content, error);
         }
     });
-    
+
     handler.start();
     return () => handler.abort();
 }

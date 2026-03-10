@@ -17,19 +17,19 @@ let currentStreamHandler = null;
  */
 export async function initChat(element) {
     chatElement = element;
-    
+
     // Ensure session is initialized
     await initSession();
-    
-    // Configure connection (for non-streaming fallback)
+
+    // Configure connection
     configureChatConnection(element);
-    
+
     // Configure interceptors
     configureInterceptors(element);
-    
+
     // Configure i18n attributes
     configureI18nAttributes(element);
-    
+
     console.log('[ChatUI] Initialized');
 }
 
@@ -44,6 +44,76 @@ function configureChatConnection(element) {
             'Content-Type': 'application/json'
         }
     };
+
+    if (typeof element.render === 'function') {
+        element.render();
+    }
+}
+
+/**
+ * Configure request and response interceptors
+ */
+function configureInterceptors(element) {
+    element.requestInterceptor = async (request) => {
+        console.log('[ChatUI] Request intercepted:', request);
+
+        const body = parseRequestBody(request.body);
+        const messageText = extractMessageText(body);
+
+        let sessionKey = getSessionKey();
+        if (!sessionKey) {
+            sessionKey = await initSession();
+        }
+
+        request.body = {
+            session_key: sessionKey || '',
+            message: messageText || '',
+            timeout_seconds: 600
+        };
+
+        return request;
+    };
+
+    element.responseInterceptor = (response) => {
+        const payload = parseResponseBody(response);
+        const runId = payload?.run_id || payload?.runId || payload?.id;
+
+        if (!runId || typeof runId !== 'string') {
+            console.warn('[ChatUI] Missing run_id in /api/agent/run response:', response);
+            if (payload?.detail) {
+                console.warn('[ChatUI] /api/agent/run validation detail:', payload.detail);
+            }
+            return response;
+        }
+
+        handleStreamingResponse(runId).catch((err) => {
+            console.error('[ChatUI] Streaming failed:', err);
+        });
+
+        return { text: '' };
+    };
+}
+
+function parseRequestBody(raw) {
+    if (!raw) return {};
+    if (typeof raw === 'object') return raw;
+    if (typeof raw !== 'string') return { text: String(raw) };
+    try {
+        return JSON.parse(raw);
+    } catch {
+        return { text: raw };
+    }
+}
+
+function parseResponseBody(raw) {
+    if (!raw) return {};
+    if (typeof raw === 'object') return raw;
+    if (typeof raw !== 'string') return {};
+    try {
+        return JSON.parse(raw);
+    } catch {
+        return {};
+    }
 }
 
 /**
@@ -54,12 +124,10 @@ function configureI18nAttributes(element) {
         console.warn('[ChatUI] Locale not loaded, skipping i18n config');
         return;
     }
-    
-    // Set introMessage
+
     const introMessage = t('chat.introMessage');
     element.introMessage = { text: introMessage };
-    
-    // Set placeholder
+
     const placeholder = t('chat.placeholder');
     element.textInput = {
         placeholder: {
@@ -80,130 +148,136 @@ function configureI18nAttributes(element) {
 }
 
 /**
- * Configure request and response interceptors
- */
-function configureInterceptors(element) {
-    // Request interceptor: convert DeepChat format to Uniclaw API format
-    element.requestInterceptor = async (request) => {
-        console.log('[ChatUI] Request intercepted:', request);
-        
-        // Extract message text
-        const messageText = extractMessageText(request.body);
-        
-        // Get session key
-        const sessionKey = getSessionKey();
-        if (!sessionKey) {
-            console.error('[ChatUI] No session key');
-            throw new Error('Session not initialized');
-        }
-
-        // Let DeepChat send the single authoritative POST /api/agent/run request.
-        request.body = {
-            session_key: sessionKey,
-            message: messageText
-        };
-        return request;
-    };
-    
-    // Response interceptor
-    element.responseInterceptor = async (response) => {
-        if (response?.run_id) {
-            startStreamingRun(response.run_id);
-            return { text: '...' };
-        }
-        return response;
-    };
-}
-
-/**
  * Extract message text from request body
  */
 function extractMessageText(body) {
     if (!body) return '';
-    
-    if (typeof body === 'string') {
-        try {
-            const parsed = JSON.parse(body);
-            if (parsed.messages) {
-                const last = parsed.messages[parsed.messages.length - 1];
-                return last.text || last.content || '';
-            }
-            return parsed.message || parsed.text || '';
-        } catch (e) {
-            return body;
-        }
+
+    if (typeof body === 'string') return body;
+
+    if (body.messages && Array.isArray(body.messages) && body.messages.length > 0) {
+        const lastMessage = body.messages[body.messages.length - 1] || {};
+        if (typeof lastMessage === 'string') return lastMessage;
+        if (lastMessage.text) return String(lastMessage.text);
+        if (lastMessage.content) return String(lastMessage.content);
     }
-    
-    if (body.messages) {
-        const last = body.messages[body.messages.length - 1];
-        return last.text || last.content || '';
-    }
-    
-    return body.message || body.text || '';
+
+    if (body.message) return String(body.message);
+    if (body.text) return String(body.text);
+    if (body.input) return String(body.input);
+
+    return '';
 }
 
 /**
- * Start streaming for an existing run
+ * Handle streaming response
  */
-function startStreamingRun(runId) {
-    console.log('[ChatUI] Started run:', runId);
-    
-    // Create AI message placeholder
-    let aiMessageContent = '';
-    currentStreamHandler = createStreamHandler(runId, {
-        onStart: () => {
-            console.log('[ChatUI] Stream started');
-        },
-        onDelta: (data) => {
-            if (data.content) {
-                aiMessageContent += data.content;
-                updateAiMessage(aiMessageContent);
-            }
-        },
-        onToolStart: (data) => {
-            console.log('[ChatUI] Tool start:', data.tool_name);
-            showToolIndicator(data.tool_name);
-        },
-        onToolEnd: (data) => {
-            console.log('[ChatUI] Tool end:', data.tool_name);
-            hideToolIndicator();
-        },
-        onEnd: () => {
-            console.log('[ChatUI] Stream ended');
-            finalizeAiMessage(aiMessageContent);
-            currentStreamHandler = null;
-        },
-        onError: (error) => {
-            console.error('[ChatUI] Stream error:', error);
-            currentStreamHandler = null;
-        }
-    });
+async function handleStreamingResponse(runId) {
+    console.log('[ChatUI] Handling streaming response for run:', runId);
 
-    currentStreamHandler.start();
+    let aiMessageContent = '';
+    const canUpdateMessage = !!(chatElement && typeof chatElement.updateMessage === 'function');
+    let aiMessageIndex = null;
+    let hasRenderedDelta = false;
+
+    if (chatElement && canUpdateMessage) {
+        chatElement.addMessage({ text: '', role: 'ai' });
+        const messages = chatElement.getMessages ? chatElement.getMessages() : [];
+        aiMessageIndex = messages.length - 1;
+    }
+
+    return new Promise((resolve, reject) => {
+        currentStreamHandler = createStreamHandler(runId, {
+            onStart: () => {
+                console.log('[ChatUI] Stream started');
+            },
+            onDelta: (data) => {
+                if (data.content) {
+                    aiMessageContent += data.content;
+                    if (canUpdateMessage) {
+                        updateAiMessage(aiMessageContent, aiMessageIndex, canUpdateMessage);
+                        hasRenderedDelta = true;
+                    }
+                }
+            },
+            onToolStart: (data) => {
+                console.log('[ChatUI] Tool start:', data.tool_name);
+                showToolIndicator(data.tool_name);
+            },
+            onToolEnd: (data) => {
+                console.log('[ChatUI] Tool end:', data.tool_name);
+                hideToolIndicator();
+            },
+            onEnd: () => {
+                console.log('[ChatUI] Stream ended');
+                finalizeAiMessage(aiMessageContent, aiMessageIndex, canUpdateMessage, hasRenderedDelta);
+                currentStreamHandler = null;
+                resolve({ text: aiMessageContent });
+            },
+            onError: (error) => {
+                console.error('[ChatUI] Stream error:', error);
+                appendErrorMessage(error?.message || 'Stream error');
+                currentStreamHandler = null;
+                reject(error);
+            }
+        });
+
+        currentStreamHandler.start();
+    });
+}
+
+function appendErrorMessage(message) {
+    if (!chatElement) return;
+    if (typeof chatElement.addErrorMessage === 'function') {
+        chatElement.addErrorMessage(message);
+        return;
+    }
+    chatElement.addMessage({ text: `Error: ${message}`, role: 'ai' });
 }
 
 /**
  * Update AI message (streaming)
  */
-function updateAiMessage(content) {
+function updateAiMessage(content, messageIndex, canUpdateMessage) {
     if (!chatElement) return;
+    if (!canUpdateMessage) return;
 
-    chatElement.addMessage({ text: content, role: 'ai', overwrite: true });
+    if (messageIndex !== null) {
+        try {
+            chatElement.updateMessage({ text: content, role: 'ai' }, messageIndex);
+            return;
+        } catch {
+            // fallback below
+        }
+    }
 }
 
 /**
  * Finalize AI message
  */
-function finalizeAiMessage(content) {
+function finalizeAiMessage(content, messageIndex, canUpdateMessage, hasRenderedDelta) {
     if (!chatElement) return;
-    chatElement.addMessage({ text: content, role: 'ai', overwrite: true });
+
+    if (canUpdateMessage && messageIndex !== null) {
+        try {
+            chatElement.updateMessage({ text: content, role: 'ai' }, messageIndex);
+            return;
+        } catch {
+            // fallback below
+        }
+    }
+
+    if (hasRenderedDelta) {
+        return;
+    }
+
+    chatElement.addMessage({ text: content, role: 'ai' });
 }
 
 /**
  * Show tool execution indicator
  */
 function showToolIndicator(toolName) {
-    // Can use DOM manipulation to show loading indicator
     console.log('[ChatUI] Executing tool:', toolName);
 }
 
