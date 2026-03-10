@@ -9,13 +9,17 @@ corresponds to tasks.md 7.2.
 """
 
 import asyncio
+import json
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from fastapi import FastAPI
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Header, status
-from fastapi.responses import StreamingResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..session.manager import SessionManager
@@ -26,6 +30,8 @@ from ..memory.manager import MemoryManager
 from ..core.deps import SkillDeps
 from ..auth.models import UserInfo, ANONYMOUS_USER
 from .sse import SSEManager, SSEEvent, SSEEventType
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -196,6 +202,35 @@ def get_api_context() -> APIContext:
             detail="API context not initialized"
         )
     return _api_context
+
+
+def _safe_decode_request_body(body: bytes, max_chars: int = 1000) -> str:
+    if not body:
+        return "<empty>"
+
+    try:
+        parsed = json.loads(body)
+        text = json.dumps(parsed, ensure_ascii=True, sort_keys=True)
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+        text = body.decode("utf-8", errors="replace")
+
+    if len(text) > max_chars:
+        return f"{text[:max_chars]}...<truncated>"
+    return text
+
+
+def install_request_validation_logging(app: FastAPI) -> None:
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        body = await request.body()
+        logger.warning(
+            "Request validation failed: method=%s path=%s errors=%s body=%s",
+            request.method,
+            request.url.path,
+            exc.errors(),
+            _safe_decode_request_body(body),
+        )
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 
 # ============================================================================
@@ -433,6 +468,14 @@ def create_router() -> APIRouter:
         
         # Extract UserInfo injected by AuthMiddleware
         user_info: UserInfo = getattr(request_obj.state, "user_info", ANONYMOUS_USER)
+        logger.info(
+            "Accepted agent run: run_id=%s session_key=%s user_id=%s timeout_seconds=%s message_length=%s",
+            run_id,
+            request.session_key,
+            user_info.user_id,
+            request.timeout_seconds,
+            len(request.message),
+        )
         
         # run
         ctx.active_runs[run_id] = {

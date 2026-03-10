@@ -71,6 +71,7 @@ class AgentRunner:
         start_time = time.monotonic()
         tool_calls_count = 0
         compaction_applied = False
+        assistant_emitted = False
         persist_override_messages: Optional[list[dict]] = None
         persist_override_base_len: int = 0
 
@@ -234,6 +235,7 @@ class AgentRunner:
                                         "content": content,
                                     },
                                 )
+                            assistant_emitted = True
                             yield StreamEvent.assistant_delta(content)
 
                         # Surface tool activity in the event stream.
@@ -290,6 +292,19 @@ class AgentRunner:
                             final_messages = persist_override_messages + final_messages[persist_override_base_len:]
                         else:
                             final_messages = persist_override_messages
+
+                    if not assistant_emitted:
+                        final_assistant = next(
+                            (
+                                msg["content"]
+                                for msg in reversed(final_messages)
+                                if msg.get("role") == "assistant" and msg.get("content")
+                            ),
+                            "",
+                        )
+                        if final_assistant:
+                            assistant_emitted = True
+                            yield StreamEvent.assistant_delta(final_assistant)
                     await self.sessions.persist_transcript(session_key, final_messages)
 
             except Exception as e:
@@ -417,8 +432,8 @@ class AgentRunner:
                 normalized.append(item)
                 continue
 
-            role = getattr(msg, "role", "assistant")
-            content = getattr(msg, "content", "")
+            role = self._extract_message_role(msg)
+            content = self._extract_message_content(msg)
             item = {
                 "role": str(role),
                 "content": content if isinstance(content, str) else str(content),
@@ -438,6 +453,40 @@ class AgentRunner:
                 item["tool_calls"] = normalized_tool_calls
             normalized.append(item)
         return normalized
+
+    def _extract_message_role(self, msg: Any) -> str:
+        role = getattr(msg, "role", None)
+        if isinstance(role, str) and role:
+            return role
+
+        kind = getattr(msg, "kind", "")
+        if kind == "request":
+            return "user"
+        if kind == "response":
+            return "assistant"
+        return "assistant"
+
+    def _extract_message_content(self, msg: Any) -> str:
+        content = getattr(msg, "content", None)
+        if isinstance(content, str):
+            return content
+
+        parts = getattr(msg, "parts", None)
+        if not parts:
+            return "" if content is None else str(content)
+
+        chunks: list[str] = []
+        for part in parts:
+            part_kind = getattr(part, "part_kind", "")
+            part_content = getattr(part, "content", None)
+            if part_kind in {"text", "user-prompt", "system-prompt"}:
+                if isinstance(part_content, str):
+                    chunks.append(part_content)
+                elif isinstance(part_content, (list, tuple)):
+                    chunks.extend(str(item) for item in part_content if item)
+                elif part_content:
+                    chunks.append(str(part_content))
+        return "".join(chunks)
 
     def _is_model_request_node(self, node: Any) -> bool:
         """Return whether a node represents a model request boundary."""

@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.uniclaw.api.routes import create_router, APIContext, set_api_context
+from app.uniclaw.api.routes import create_router, APIContext, install_request_validation_logging, set_api_context
 from app.uniclaw.session.manager import SessionManager
 from app.uniclaw.session.queue import SessionQueue
 from app.uniclaw.skills.registry import SkillRegistry
@@ -202,6 +202,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    install_request_validation_logging(app)
     
     # Mount static files for frontend
     frontend_dir = Path(__file__).parent.parent / "frontend"

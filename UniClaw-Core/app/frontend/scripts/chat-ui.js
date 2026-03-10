@@ -3,7 +3,6 @@
  * Configure DeepChat component integration with Uniclaw API
  */
 
-import { startAgentRun } from './api-client.js';
 import { getSessionKey, initSession } from './session-manager.js';
 import { createStreamHandler } from './stream-handler.js';
 import { buildApiUrl } from './config.js';
@@ -89,7 +88,7 @@ function configureInterceptors(element) {
         console.log('[ChatUI] Request intercepted:', request);
         
         // Extract message text
-        let messageText = extractMessageText(request.body);
+        const messageText = extractMessageText(request.body);
         
         // Get session key
         const sessionKey = getSessionKey();
@@ -97,24 +96,20 @@ function configureInterceptors(element) {
             console.error('[ChatUI] No session key');
             throw new Error('Session not initialized');
         }
-        
-        // Use streaming handler
-        try {
-            const result = await handleStreamingRequest(sessionKey, messageText);
-            // Return dummy request to prevent DeepChat default behavior
-            request.body = JSON.stringify({ _handled: true });
-            return request;
-        } catch (e) {
-            console.error('[ChatUI] Stream error:', e);
-            throw e;
-        }
+
+        // Let DeepChat send the single authoritative POST /api/agent/run request.
+        request.body = {
+            session_key: sessionKey,
+            message: messageText
+        };
+        return request;
     };
     
     // Response interceptor
-    element.responseInterceptor = (response) => {
-        // If this is a handled request, return empty response
-        if (response._handled) {
-            return { text: '' };
+    element.responseInterceptor = async (response) => {
+        if (response?.run_id) {
+            startStreamingRun(response.run_id);
+            return { text: '...' };
         }
         return response;
     };
@@ -148,52 +143,43 @@ function extractMessageText(body) {
 }
 
 /**
- * Handle streaming request
+ * Start streaming for an existing run
  */
-async function handleStreamingRequest(sessionKey, message) {
-    // Start agent run
-    const runInfo = await startAgentRun(sessionKey, message);
-    const runId = runInfo.run_id;
-    
+function startStreamingRun(runId) {
     console.log('[ChatUI] Started run:', runId);
     
     // Create AI message placeholder
     let aiMessageContent = '';
-    
-    return new Promise((resolve, reject) => {
-        currentStreamHandler = createStreamHandler(runId, {
-            onStart: () => {
-                console.log('[ChatUI] Stream started');
-            },
-            onDelta: (data) => {
-                if (data.content) {
-                    aiMessageContent += data.content;
-                    updateAiMessage(aiMessageContent);
-                }
-            },
-            onToolStart: (data) => {
-                console.log('[ChatUI] Tool start:', data.tool_name);
-                showToolIndicator(data.tool_name);
-            },
-            onToolEnd: (data) => {
-                console.log('[ChatUI] Tool end:', data.tool_name);
-                hideToolIndicator();
-            },
-            onEnd: () => {
-                console.log('[ChatUI] Stream ended');
-                finalizeAiMessage(aiMessageContent);
-                currentStreamHandler = null;
-                resolve({ text: aiMessageContent });
-            },
-            onError: (error) => {
-                console.error('[ChatUI] Stream error:', error);
-                currentStreamHandler = null;
-                reject(error);
+    currentStreamHandler = createStreamHandler(runId, {
+        onStart: () => {
+            console.log('[ChatUI] Stream started');
+        },
+        onDelta: (data) => {
+            if (data.content) {
+                aiMessageContent += data.content;
+                updateAiMessage(aiMessageContent);
             }
-        });
-        
-        currentStreamHandler.start();
+        },
+        onToolStart: (data) => {
+            console.log('[ChatUI] Tool start:', data.tool_name);
+            showToolIndicator(data.tool_name);
+        },
+        onToolEnd: (data) => {
+            console.log('[ChatUI] Tool end:', data.tool_name);
+            hideToolIndicator();
+        },
+        onEnd: () => {
+            console.log('[ChatUI] Stream ended');
+            finalizeAiMessage(aiMessageContent);
+            currentStreamHandler = null;
+        },
+        onError: (error) => {
+            console.error('[ChatUI] Stream error:', error);
+            currentStreamHandler = null;
+        }
     });
+
+    currentStreamHandler.start();
 }
 
 /**
@@ -201,19 +187,8 @@ async function handleStreamingRequest(sessionKey, message) {
  */
 function updateAiMessage(content) {
     if (!chatElement) return;
-    
-    // DeepChat's addMessage appends new messages
-    // Here we use a custom way to update the last message
-    const messages = chatElement.getMessages ? chatElement.getMessages() : [];
-    const lastMessage = messages[messages.length - 1];
-    
-    if (lastMessage && lastMessage.role === 'ai') {
-        // Update existing message
-        chatElement.updateMessage({ text: content, role: 'ai' });
-    } else {
-        // Add new message
-        chatElement.addMessage({ text: content, role: 'ai' });
-    }
+
+    chatElement.addMessage({ text: content, role: 'ai', overwrite: true });
 }
 
 /**
@@ -221,9 +196,7 @@ function updateAiMessage(content) {
  */
 function finalizeAiMessage(content) {
     if (!chatElement) return;
-    
-    // Ensure final message is displayed correctly
-    chatElement.addMessage({ text: content, role: 'ai' });
+    chatElement.addMessage({ text: content, role: 'ai', overwrite: true });
 }
 
 /**
