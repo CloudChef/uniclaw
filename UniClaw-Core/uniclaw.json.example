@@ -1,43 +1,73 @@
 {
+  "_comment": "Example UniClaw configuration. This file stays valid JSON by using _comment fields instead of // comments.",
+
   "model": {
-    "primary": "doubao/doubao-seed-1-6-lite-251015",
+    "_comment": "Primary LLM configuration. Replace provider/model and env vars to match your deployment.",
+    "primary": "deepseek/deepseek-chat",
     "fallbacks": [],
-    "temperature": 0.7,
+    "temperature": 0.2,
     "providers": {
-      "doubao": {
-        "base_url": "${DOUBAO_BASE_URL}",
-        "api_key": "${DOUBAO_API_KEY}",
+      "deepseek": {
+        "_comment": "OpenAI-compatible DeepSeek endpoint. Requires DS_API_KEY in the environment or .env.",
+        "base_url": "https://api.deepseek.com",
+        "api_key": "${DS_API_KEY}",
         "api_type": "openai"
       }
     }
   },
 
   "service_providers": {
+    "_comment": "Enterprise system instances used by skills. Instance names like dev/prod are referenced at runtime.",
     "jira": {
-      "prod": {
-        "base_url": "https://jira.corp.com",
-        "username": "admin",
-        "token": "${JIRA_PROD_TOKEN}",
-        "api_version": "2",
-        "default_project": "PROJ"
-      },
       "dev": {
-        "base_url": "https://jira-dev.corp.com",
-        "username": "admin",
-        "token": "${JIRA_DEV_TOKEN}",
+        "_comment": "Jira supports either password or token. Keep only the one you actually use.",
+        "base_url": "https://jira-dev.example.com/",
+        "username": "${JIRA_USERNAME}",
+        "password": "${JIRA_PASSWORD}",
         "api_version": "2",
-        "default_project": "DEV"
+        "default_project": "TEST"
       }
     }
   },
 
+  "webhook": {
+    "_comment": "Inbound webhook dispatch for provider-qualified markdown skills such as smartcmp:preapproval-agent.",
+    "enabled": true,
+    "header_name": "X-UniClaw-SK",
+    "skill_sources": [
+      {
+        "_comment": "External SmartCMP provider skills, addressed as smartcmp:<skill-name>.",
+        "provider": "smartcmp",
+        "root": "../UniClaw-Providers/SmartCMP-Provider/skills"
+      },
+      {
+        "_comment": "Built-in Jira markdown skills, addressed as jira:<skill-name> when exposed through webhook.",
+        "provider": "jira",
+        "root": "app/uniclaw/providers/jira/skills"
+      }
+    ],
+    "systems": [
+      {
+        "_comment": "One external caller. sk_env points to the shared secret variable, typically defined in .env.",
+        "system_id": "smartcmp-preapproval",
+        "enabled": true,
+        "sk_env": "UNICLAW_WEBHOOK_SK_SMARTCMP_PREAPPROVAL",
+        "default_agent_id": "main",
+        "allowed_skills": [
+          "smartcmp:preapproval-agent"
+        ]
+      }
+    ]
+  },
+
   "auth": {
+    "_comment": "Optional API authentication config for normal REST/UI access. Webhook secret auth is configured separately above.",
     "provider": "none",
     "cache_ttl_seconds": 300,
 
     "smartcmp": {
-      "validate_url": "https://192.168.191.191/platform-api/auth/validate",
-      "api_base_url": "https://192.168.191.191"
+      "validate_url": "https://smartcmp.example.com/platform-api/auth/validate",
+      "api_base_url": "https://smartcmp.example.com"
     },
 
     "oidc": {
@@ -50,7 +80,10 @@
 
     "api_key": {
       "keys": {
-        "sk-dev-key-001": { "user_id": "dev-user", "roles": ["admin"] }
+        "sk-dev-key-001": {
+          "user_id": "dev-user",
+          "roles": ["admin"]
+        }
       }
     },
 

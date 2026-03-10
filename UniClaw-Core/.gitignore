@@ -8,4 +8,5 @@
 
 # 你的其他忽略项
 .env
+.env.local
 nul
