@@ -1,0 +1,616 @@
+# UniClaw Provider Development Guide
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Provider Architecture](#provider-architecture)
+3. [Directory Structure](#directory-structure)
+4. [Provider Configuration](#provider-configuration)
+5. [Skills Development](#skills-development)
+6. [Jira Provider Example](#jira-provider-example)
+7. [Best Practices](#best-practices)
+8. [Testing](#testing)
+
+---
+
+## Overview
+
+### What is a Provider?
+
+A **Provider** in UniClaw is a modular integration package that connects the AI Agent to external enterprise systems. Providers encapsulate:
+
+- **Authentication logic** - How to connect to the external system
+- **Skills** - Actions the Agent can perform on the system
+- **Configuration** - Connection parameters and settings
+- **Documentation** - How the Agent should use the integration
+
+### Provider Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| **ITSM** | IT Service Management | Jira, ServiceNow |
+| **CRM** | Customer Relationship Management | Salesforce, HubSpot |
+| **Monitoring** | System monitoring | Datadog, Prometheus |
+| **Communication** | Messaging platforms | Slack, Teams |
+| **Custom** | Internal systems | Internal APIs |
+
+---
+
+## Provider Architecture
+
+### Design Principles
+
+1. **Self-Contained** - Each provider is an independent package
+2. **Configuration-Driven** - Connection details via configuration files
+3. **Skill-Based** - Functionality exposed through Skills
+4. **Permission-Aware** - Respects user's actual system permissions
+5. **Documented** - Comprehensive documentation for the Agent
+
+### Component Interaction
+
+```
+User Request
+    ↓
+Agent Runner
+    ↓
+Provider Skill
+    ↓
+Provider Configuration
+    ↓
+External System API
+    ↓
+Response
+```
+
+### Provider Lifecycle
+
+1. **Registration** - Provider configured in `uniclaw.json`
+2. **Discovery** - Skills auto-discovered at startup
+3. **Selection** - User or Agent selects provider instance
+4. **Execution** - Skill executes with provider credentials
+5. **Response** - Results returned to Agent
+
+---
+
+## Directory Structure
+
+### Standard Provider Layout
+
+```
+providers/<provider-name>/
+├── PROVIDER.md              # Provider documentation (required)
+├── README.md                # Human-readable description
+├── skills/                  # Provider Skills
+│   └── <skill-name>/
+│       ├── SKILL.md         # Skill metadata and documentation
+│       └── scripts/         # Skill implementation
+│           ├── __init__.py
+│           ├── handler.py   # Main skill handler
+│           └── _utils.py    # Helper functions
+└── references/              # Reference documentation
+    └── api_mapping.md       # API endpoint mapping
+```
+
+### File Purposes
+
+| File | Purpose | Required |
+|------|---------|----------|
+| `PROVIDER.md` | Provider metadata and capabilities | Yes |
+| `README.md` | Human-readable overview | Recommended |
+| `SKILL.md` | Skill definition and usage | Yes |
+| `handler.py` | Skill implementation | Yes |
+| `references/` | Additional documentation | Optional |
+
+---
+
+## Provider Configuration
+
+### Configuration Schema
+
+Providers are configured in `uniclaw.json` under `service_providers`:
+
+```json
+{
+  "service_providers": {
+    "<provider-type>": {
+      "<instance-name>": {
+        "base_url": "https://api.example.com",
+        "username": "${USERNAME}",
+        "password": "${PASSWORD}",
+        "api_version": "2",
+        "default_project": "DEFAULT"
+      }
+    }
+  }
+}
+```
+
+### Configuration Fields
+
+| Field | Description | Required |
+|-------|-------------|----------|
+| `base_url` | API base URL | Yes |
+| `username` | Authentication username | Optional |
+| `password` | Authentication password/token | Optional |
+| `api_version` | API version to use | Optional |
+| `default_project` | Default project/key | Optional |
+
+### Environment Variables
+
+Sensitive configuration should use environment variables:
+
+```json
+{
+  "password": "${JIRA_PASSWORD}"
+}
+```
+
+Set in environment:
+```bash
+export JIRA_PASSWORD="your-secure-password"
+```
+
+---
+
+## Skills Development
+
+### Skill Types
+
+#### 1. Action Skills
+
+Perform operations on the external system:
+- Create resources
+- Update resources
+- Delete resources
+- Execute commands
+
+#### 2. Query Skills
+
+Retrieve information from the external system:
+- List resources
+- Get details
+- Search
+- Report generation
+
+#### 3. Workflow Skills
+
+Combine multiple actions into workflows:
+- Multi-step processes
+- Conditional logic
+- Error handling
+
+### Skill Metadata
+
+Each skill requires metadata defining:
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `name` | Unique skill identifier | `jira_issue_create` |
+| `description` | What the skill does | "Create a Jira issue" |
+| `category` | Skill category | `provider:jira` |
+| `provider_type` | Associated provider | `jira` |
+| `instance_required` | Needs provider instance | `true` |
+
+### Skill Parameters
+
+Skills accept parameters defined by:
+
+| Attribute | Description | Example |
+|-----------|-------------|---------|
+| `name` | Parameter name | `summary` |
+| `type` | Data type | `str`, `int`, `bool` |
+| `description` | Parameter description | "Issue summary" |
+| `required` | Is required | `true` / `false` |
+| `default` | Default value | `"Task"` |
+
+### Skill Response
+
+Skills return structured responses:
+
+| Field | Description |
+|-------|-------------|
+| `success` | Operation success status |
+| `message` | Human-readable result |
+| `data` | Structured result data |
+| `error` | Error details (if failed) |
+
+---
+
+## Jira Provider Example
+
+### Provider Overview
+
+The Jira Provider enables the AI Agent to interact with Jira instances for issue tracking and project management.
+
+### Capabilities
+
+#### Issue Management
+- Create new issues
+- Update existing issues
+- Delete issues
+- Retrieve issue details
+- List issues by project
+
+#### Project Operations
+- List available projects
+- Get project details
+- List project components
+- List issue types
+
+#### Search and Reporting
+- Search issues with JQL
+- List active issues
+- Generate reports
+
+### Configuration Requirements
+
+#### Connection Parameters
+- **Base URL** - Jira instance URL (e.g., `https://jira.company.com`)
+- **Authentication** - Username/password or API token
+- **API Version** - REST API version (typically "2")
+- **Default Project** - Default project key for operations
+
+#### Authentication Methods
+- **Basic Auth** - Username and password/token
+- **API Token** - Personal access token (recommended)
+- **OAuth** - OAuth 2.0 (if supported by instance)
+
+### Skills Provided
+
+#### 1. Issue Creation Skill
+
+**Purpose**: Create new Jira issues
+
+**Input Requirements**:
+- Summary (title) of the issue
+- Description of the issue
+- Issue type (Bug, Task, Story, etc.)
+- Project key (optional, uses default)
+- Priority (optional)
+
+**Auto-Detection Features**:
+- Detects required fields for the project
+- Automatically selects first available component if required
+- Validates issue type against project
+
+**Output**:
+- Created issue key (e.g., "PROJ-123")
+- Issue ID
+- Project key
+- Confirmation message
+
+#### 2. Issue Retrieval Skill
+
+**Purpose**: Get details of an existing issue
+
+**Input Requirements**:
+- Issue key (e.g., "PROJ-123")
+
+**Output**:
+- Issue summary
+- Description
+- Status
+- Assignee
+- Reporter
+- Created/updated dates
+- Comments
+- Custom fields
+
+#### 3. Issue Update Skill
+
+**Purpose**: Modify existing issues
+
+**Input Requirements**:
+- Issue key
+- Fields to update (summary, description, status, etc.)
+
+**Supported Updates**:
+- Summary
+- Description
+- Priority
+- Assignee
+- Labels
+- Custom fields
+
+#### 4. Issue Deletion Skill
+
+**Purpose**: Remove issues from Jira
+
+**Input Requirements**:
+- Issue key
+
+**Safety Features**:
+- Confirmation required
+- Permission checks
+- Audit logging
+
+#### 5. Issue Listing Skill
+
+**Purpose**: List issues in a project
+
+**Input Requirements**:
+- Project key (optional)
+- Maximum results (optional)
+
+**Output**:
+- List of issues with key, summary, status
+- Total count
+- Pagination info
+
+### Provider Tools
+
+The Jira Provider includes tools for:
+
+#### Instance Management
+- **List Instances** - Show configured Jira instances
+- **Select Instance** - Choose which instance to use
+- **Test Connection** - Verify connectivity
+
+#### Metadata Retrieval
+- **Get Projects** - List accessible projects
+- **Get Issue Types** - List available issue types
+- **Get Components** - List project components
+- **Get Priorities** - List priority levels
+
+### Error Handling
+
+#### Common Error Scenarios
+
+| Error | Cause | Resolution |
+|-------|-------|------------|
+| Authentication Failed | Invalid credentials | Check username/password |
+| Project Not Found | Invalid project key | Verify project exists |
+| Issue Type Required | Missing issue type | Specify valid issue type |
+| Component Required | Project requires component | Select available component |
+| Permission Denied | Insufficient permissions | Check user permissions |
+| API Rate Limited | Too many requests | Wait and retry |
+
+#### Error Response Format
+
+Errors return structured information:
+- Error code
+- Human-readable message
+- Suggested resolution
+- Technical details (for debugging)
+
+### Security Considerations
+
+#### Authentication Security
+- Store credentials in environment variables
+- Use API tokens instead of passwords when possible
+- Implement token rotation
+- Never log credentials
+
+#### Permission Enforcement
+- Respect Jira's native permissions
+- Don't bypass RBAC
+- Log access for audit
+- Validate user actions
+
+#### Data Protection
+- Don't cache sensitive data
+- Sanitize logs
+- Use HTTPS only
+- Validate SSL certificates
+
+### Documentation Requirements
+
+#### PROVIDER.md Content
+
+Must include:
+1. Provider name and version
+2. Supported Jira versions
+3. Authentication methods
+4. Required permissions
+5. Available skills overview
+6. Configuration examples
+7. Troubleshooting guide
+
+#### SKILL.md Content
+
+Must include:
+1. Skill name and description
+2. When to use this skill
+3. Input parameters
+4. Expected output
+5. Error scenarios
+6. Usage examples
+7. Related skills
+
+#### API Mapping Documentation
+
+Should document:
+1. Jira REST API endpoints used
+2. Authentication flow
+3. Rate limits
+4. Data transformations
+5. Field mappings
+
+---
+
+## Best Practices
+
+### Design Principles
+
+#### 1. User-Centric Design
+- Skills should match user workflows
+- Use business terminology, not technical terms
+- Provide sensible defaults
+- Guide users through complex operations
+
+#### 2. Robust Error Handling
+- Validate inputs before API calls
+- Provide clear error messages
+- Suggest corrective actions
+- Graceful degradation
+
+#### 3. Performance Optimization
+- Cache metadata when appropriate
+- Use pagination for large datasets
+- Implement request batching
+- Handle timeouts gracefully
+
+#### 4. Security First
+- Never expose credentials
+- Validate all inputs
+- Use principle of least privilege
+- Log security events
+
+### Implementation Guidelines
+
+#### Configuration Management
+- Support multiple instances
+- Use environment variables for secrets
+- Validate configuration at startup
+- Provide helpful error messages
+
+#### API Client Design
+- Reuse connections
+- Implement retry logic
+- Handle rate limiting
+- Support connection pooling
+
+#### Response Processing
+- Normalize API responses
+- Handle missing fields
+- Convert data types
+- Format for Agent consumption
+
+### Testing Strategy
+
+#### Unit Tests
+- Test skill logic in isolation
+- Mock external API calls
+- Validate input/output
+- Test error scenarios
+
+#### Integration Tests
+- Test with real Jira instance
+- Verify end-to-end workflows
+- Test authentication flows
+- Validate error handling
+
+#### E2E Tests
+- Full Agent workflow tests
+- Multiple skill coordination
+- User scenario simulation
+- Performance validation
+
+---
+
+## Testing
+
+### Test Environment Setup
+
+#### Requirements
+- Test Jira instance
+- Test user account
+- Sample projects and issues
+- Test data fixtures
+
+#### Configuration
+```json
+{
+  "service_providers": {
+    "jira": {
+      "test": {
+        "base_url": "https://jira-test.company.com",
+        "username": "test-user",
+        "password": "${TEST_JIRA_PASSWORD}",
+        "default_project": "TEST"
+      }
+    }
+  }
+}
+```
+
+### Test Cases
+
+#### Connection Tests
+- Valid credentials
+- Invalid credentials
+- Network errors
+- Timeout scenarios
+
+#### Skill Tests
+- Happy path scenarios
+- Validation failures
+- Permission errors
+- Edge cases
+
+#### Integration Tests
+- Multi-skill workflows
+- Error recovery
+- Concurrent operations
+- Large data handling
+
+### Test Data Management
+
+#### Fixtures
+- Sample projects
+- Test issues
+- User accounts
+- Configuration variants
+
+#### Cleanup
+- Delete test issues
+- Reset test data
+- Remove temporary resources
+- Restore original state
+
+---
+
+## Deployment
+
+### Provider Distribution
+
+#### Built-in Providers
+- Included in UniClaw Core
+- Auto-discovered at startup
+- Updated with Core releases
+
+#### Custom Providers
+- Placed in workspace directory
+- Loaded dynamically
+- Independent versioning
+
+### Configuration Deployment
+
+#### Development
+- Local configuration files
+- Environment variables
+- Test instances
+
+#### Production
+- Secure credential storage
+- Environment-specific configs
+- Monitoring and logging
+- Backup and recovery
+
+---
+
+## Summary
+
+### Key Takeaways
+
+1. **Providers are modular** - Self-contained integration packages
+2. **Skills are the interface** - Agent interacts through Skills
+3. **Configuration is flexible** - Multiple instances, environment-based
+4. **Documentation is critical** - Both for humans and AI
+5. **Security is paramount** - Respect permissions, protect credentials
+6. **Testing is essential** - Unit, integration, and E2E tests
+
+### Next Steps
+
+1. Review existing Provider implementations
+2. Design your Provider's Skill set
+3. Create Provider documentation
+4. Implement Skills with tests
+5. Deploy and validate
+
+### Resources
+
+- [OpenSpec Provider Guide](../openspec/PROVIDERS.md)
+- [Jira REST API Documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v2/)
+- [UniClaw Core Documentation](./PROJECT_OVERVIEW.md)
+- [Skill Development Guide](./SKILL_GUIDE.md)
