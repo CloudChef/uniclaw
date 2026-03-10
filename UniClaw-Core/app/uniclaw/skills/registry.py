@@ -15,6 +15,8 @@ import json
 import inspect
 import logging
 import re
+import hashlib
+import importlib.util
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Any, Optional, TYPE_CHECKING
@@ -155,6 +157,7 @@ class SkillRegistry:
         """Initialize the registry."""
         self._skills: dict[str, tuple[SkillMetadata, Callable]] = {}
         self._md_skills: dict[str, MdSkillEntry] = {}
+        self._md_skill_tools: dict[str, set[str]] = {}
         self._workspace = workspace
     
     def register(
@@ -320,72 +323,16 @@ from count JSON Schema
         *,
         max_file_bytes: int = _DEFAULT_MAX_FILE_BYTES,
     ) -> int:
-        """
+        """Load skills from SKILL.md metadata in the target directory.
 
-from Skills(executable *.py + MD Skills)
-        
-        Args:
-            directory:directory path
-            location:source identifier(built-in / user / workspace)
-            max_file_bytes:single SKILL.md count
-            
-        Returns:
-            Skills count(py + md)
-        
-"""
+        Registration source is Markdown skill metadata only. Executable handlers
+        are discovered via explicit entrypoint metadata in SKILL.md.
+        """
         path = Path(directory).expanduser()
         if not path.exists():
             return 0
-        
-        count = 0
-        # ---- executable Skills(*.py) ----
-        # Search recursively for skill directories containing scripts/
-        for file_path in path.rglob("*.py"):
-            if file_path.name.startswith("_"):
-                continue
-            # Only load from scripts/ subdirectories (skill package structure)
-            if "scripts" not in str(file_path):
-                continue
-            
-            try:
-                import importlib.util
-                import sys
-                
-                # Add the parent directory to sys.path for absolute imports
-                # This allows scripts to import from app.uniclaw
-                parent_dir = file_path.parent.parent.parent.parent.parent  # Go up to app/
-                if str(parent_dir) not in sys.path:
-                    sys.path.insert(0, str(parent_dir))
-                
-                # Also add the scripts directory for local imports
-                scripts_dir = file_path.parent
-                if str(scripts_dir) not in sys.path:
-                    sys.path.insert(0, str(scripts_dir))
-                
-                spec = importlib.util.spec_from_file_location(
-                    f"skill_{file_path.stem}",
-                    file_path,
-                )
-                if spec and spec.loader:
-                    module = importlib.util.module_from_spec(spec)
-                    # Set __package__ to allow relative imports within the module
-                    module.__package__ = f"skill_{file_path.stem}"
-                    spec.loader.exec_module(module)
-                    
-                    if hasattr(module, "SKILL_METADATA") and hasattr(module, "handler"):
-                        meta = module.SKILL_METADATA
-                        if isinstance(meta, SkillMetadata):
-                            meta.location = location
-                        self.register(meta, module.handler)
-                        count += 1
-            except Exception as e:
-                logger.warning("Failed to load py skill %s: %s", file_path, e)
-        
-        # ---- MD Skills ----
-        count += self._load_md_skills(path, location, max_file_bytes=max_file_bytes)
-        
-        return count
-    
+
+        return self._load_md_skills(path, location, max_file_bytes=max_file_bytes)
     # ------------------------------------------------------------------
     # MD Skills
     # ------------------------------------------------------------------
@@ -492,7 +439,7 @@ single MD Skill.
         parent_check = file_path.parent.name if is_directory_skill else None
         err = validate_skill_name(name, parent_dir_name=parent_check)
         if err:
-            logger.warning("Skipping %s: invalid name '%s' — %s", file_path, name, err)
+            logger.warning("Skipping %s: invalid name '%s' - %s", file_path, name, err)
             return False
 
         # description
@@ -522,16 +469,149 @@ single MD Skill.
             existing = self._md_skills[name]
             if not self._should_override(existing.location, location):
                 return False
+            self._unregister_md_skill_tools(name)
 
-        self._md_skills[name] = MdSkillEntry(
+        entry = MdSkillEntry(
             name=name,
             description=description,
             file_path=str(file_path.resolve()),
             location=location,
             metadata=metadata,
         )
+        self._md_skills[name] = entry
+        self._register_executable_tools_from_md(entry)
         return True
 
+    def _unregister_md_skill_tools(self, skill_name: str) -> None:
+        tool_names = self._md_skill_tools.pop(skill_name, set())
+        for tool_name in tool_names:
+            self.unregister(tool_name)
+
+    def _register_executable_tools_from_md(self, entry: MdSkillEntry) -> None:
+        skill_dir = Path(entry.file_path).parent
+        metadata = entry.metadata if isinstance(entry.metadata, dict) else {}
+
+        registered: set[str] = set()
+
+        single_tool_name = str(metadata.get("tool_name", "")).strip()
+        single_entrypoint = str(metadata.get("entrypoint", "")).strip()
+        if single_tool_name and single_entrypoint:
+            self._register_md_tool_entry(
+                tool_name=single_tool_name,
+                entrypoint=single_entrypoint,
+                entry=entry,
+                skill_dir=skill_dir,
+                registered=registered,
+            )
+
+        ids: set[str] = set()
+        for key in metadata.keys():
+            if key.startswith("tool_") and key.endswith("_name"):
+                ids.add(key[len("tool_") : -len("_name")])
+            elif key.startswith("tool_") and key.endswith("_entrypoint"):
+                ids.add(key[len("tool_") : -len("_entrypoint")])
+
+        for tool_id in sorted(ids):
+            tool_name = str(metadata.get(f"tool_{tool_id}_name", "")).strip()
+            entrypoint = str(metadata.get(f"tool_{tool_id}_entrypoint", "")).strip()
+            if not tool_name or not entrypoint:
+                logger.warning(
+                    "Skipping md tool declaration for skill %s: incomplete pair for id '%s'",
+                    entry.name,
+                    tool_id,
+                )
+                continue
+            self._register_md_tool_entry(
+                tool_name=tool_name,
+                entrypoint=entrypoint,
+                entry=entry,
+                skill_dir=skill_dir,
+                registered=registered,
+            )
+
+        if registered:
+            self._md_skill_tools[entry.name] = registered
+
+    def _register_md_tool_entry(
+        self,
+        *,
+        tool_name: str,
+        entrypoint: str,
+        entry: MdSkillEntry,
+        skill_dir: Path,
+        registered: set[str],
+    ) -> None:
+        module_path, attr_name = self._parse_entrypoint(entrypoint)
+        py_file = (skill_dir / module_path).resolve()
+        if not py_file.is_file():
+            logger.warning(
+                "Skipping md tool %s from %s: entrypoint file not found: %s",
+                tool_name,
+                entry.name,
+                py_file,
+            )
+            return
+
+        try:
+            handler = self._load_handler_from_file(py_file, attr_name)
+        except Exception as exc:
+            logger.warning(
+                "Skipping md tool %s from %s: failed loading handler %s (%s)",
+                tool_name,
+                entry.name,
+                entrypoint,
+                exc,
+            )
+            return
+
+        meta = SkillMetadata(
+            name=tool_name,
+            description=entry.description,
+            category=str(entry.metadata.get("category", "skill")),
+            location=entry.location,
+            provider_type=(str(entry.metadata.get("provider_type", "")).strip() or None),
+            instance_required=str(entry.metadata.get("instance_required", "")).lower() in ("1", "true", "yes"),
+        )
+        self.register(meta, handler)
+        registered.add(tool_name)
+
+    @staticmethod
+    def _parse_entrypoint(entrypoint: str) -> tuple[str, str]:
+        if ":" in entrypoint:
+            module_path, attr_name = entrypoint.rsplit(":", 1)
+            return module_path.strip(), attr_name.strip() or "handler"
+        return entrypoint.strip(), "handler"
+
+    @staticmethod
+    def _load_handler_from_file(py_file: Path, attr_name: str) -> Callable:
+        import sys
+
+        scripts_dir = str(py_file.parent)
+        inserted = False
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+            inserted = True
+
+        try:
+            module_hash = hashlib.sha1(str(py_file).encode("utf-8")).hexdigest()[:12]
+            module_name = f"uniclaw_md_skill_{module_hash}_{py_file.stem}"
+            spec = importlib.util.spec_from_file_location(module_name, py_file)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"Cannot load module from {py_file}")
+
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            handler = getattr(module, attr_name, None)
+            if handler is None or not callable(handler):
+                raise AttributeError(f"Callable '{attr_name}' not found in {py_file}")
+            return handler
+        finally:
+            if inserted:
+                try:
+                    sys.path.remove(scripts_dir)
+                except ValueError:
+                    pass
     @staticmethod
     def _should_override(existing_location: str, new_location: str) -> bool:
         """
@@ -585,3 +665,7 @@ register name
         
 """
         return list(self._skills.keys())
+
+
+
+

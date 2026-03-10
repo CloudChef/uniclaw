@@ -1,6 +1,17 @@
-﻿---
+---
 name: "jira-issue"
-description: "Jira issue skill for CRUD. Trigger when user asks to create/get/update/delete Jira issues (e.g. '创建一个Jira 的issue，记录服务失败的问题')."
+description: "Jira issue skill for CRUD. Trigger when user asks to create, get, update, or delete Jira issues."
+category: "provider:jira"
+provider_type: "jira"
+instance_required: "true"
+tool_create_name: "jira_issue_create"
+tool_create_entrypoint: "scripts/jira_issue_create.py:handler"
+tool_get_name: "jira_issue_get"
+tool_get_entrypoint: "scripts/jira_issue_get.py:handler"
+tool_update_name: "jira_issue_update"
+tool_update_entrypoint: "scripts/jira_issue_update.py:handler"
+tool_delete_name: "jira_issue_delete"
+tool_delete_entrypoint: "scripts/jira_issue_delete.py:handler"
 ---
 
 # jira-issue
@@ -29,14 +40,14 @@ Use this skill when user intent is any of:
 ## Invocation Guidance
 
 When the user says:
-- "创建一个Jira 的issue，记录服务失败的问题"
+- "Create a Jira issue for service startup failure"
 
 Construct and run:
 
 ```bash
 python app/uniclaw/providers/jira/skills/jira-issue/scripts/create_issue.py \
-  --summary "服务失败问题" \
-  --description "记录服务失败的问题"
+  --summary "Service startup failure" \
+  --description "Service failed to start due to a database connection timeout"
 ```
 
 Then return created issue key to user.

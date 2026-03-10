@@ -38,6 +38,18 @@ sys.path.insert(0, str(_ROOT))
 
 pytestmark = [pytest.mark.e2e]
 
+_ENV_REF_PATTERN = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$")
+
+def _resolve_env(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    m = _ENV_REF_PATTERN.match(value.strip())
+    if not m:
+        return value
+    env_name = m.group(1)
+    return os.environ.get(env_name, "")
+
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -58,6 +70,7 @@ def jira_config() -> dict:
 
     instance_name = next(iter(sp))
     instance = sp[instance_name]
+    instance = {k: _resolve_env(v) for k, v in instance.items()}
 
     for key in ("base_url", "username"):
         assert instance.get(key), f"Missing required field: jira.{instance_name}.{key}"
@@ -420,8 +433,8 @@ class TestJiraAgentE2E:
         session_key = session_data["session_key"]
         print(f"\n  Created session: {session_key}")
 
-        user_prompt = "请在Jira的SLSC项目中创建一个Task类型的issue，标题是'服务启动失败'，描述是'服务在启动时遇到数据库连接超时错误'"
-        
+        user_prompt = "Create a Jira Task issue in project TEST. Summary: Service startup failure. Description: Service failed to start due to a database connection timeout."
+
         run_resp = api_client.post(
             "/api/agent/run",
             json={

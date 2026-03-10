@@ -7,7 +7,7 @@
     "providers": {
       "deepseek": {
         "base_url": "https://api.deepseek.com",
-        "api_key": "",
+        "api_key": "${DEEPSEEK_API_KEY}",
         "api_type": "openai"
       }
     }
@@ -16,10 +16,10 @@
     "jira": {
       "dev": {
         "base_url": "http://192.168.1.107:8080/",
-        "username": "",
-        "password": "",
+        "username": "${JIRA_USERNAME}",
+        "password": "${JIRA_PASSWORD}",
         "api_version": "2",
-        "default_project": "SLSC"
+        "default_project": "TEST"
       }
     }
   }
