@@ -7,6 +7,7 @@
 
 import os
 import tempfile
+import json
 from pathlib import Path
 
 import pytest
@@ -144,6 +145,34 @@ class TestConfigManager:
         
         timeout = manager.get("agent_defaults.timeout_seconds")
         assert timeout == 600  # 默认值
+
+    def test_loads_dotenv_from_config_directory(self, temp_config_dir, monkeypatch):
+        """配置文件所在目录的 .env 会被自动加载"""
+        config_path = temp_config_dir / "config.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "model": {
+                        "primary": "deepseek/test",
+                        "providers": {
+                            "deepseek": {
+                                "base_url": "${FROM_DOTENV}",
+                                "api_key": "dummy",
+                                "api_type": "openai",
+                            }
+                        },
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        (temp_config_dir / ".env").write_text("FROM_DOTENV=https://dotenv.example\n", encoding="utf-8")
+        monkeypatch.delenv("FROM_DOTENV", raising=False)
+
+        manager = ConfigManager(config_path=str(config_path))
+        manager.load()
+
+        assert os.environ.get("FROM_DOTENV") == "https://dotenv.example"
 
 
 if __name__ == "__main__":

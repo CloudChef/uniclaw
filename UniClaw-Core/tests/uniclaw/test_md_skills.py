@@ -284,6 +284,33 @@ class TestSkillRegistryMdLoading:
         snap = reg.md_snapshot()
         assert snap[0]["metadata"] == {"os": "linux", "requires": "gh"}
 
+    def test_qualified_name_uses_explicit_provider(self, tmp_path):
+        """显式 provider_type 生成 provider:skill 标识"""
+        _write_skill_md(
+            tmp_path / "jira" / "SKILL.md",
+            ["name: jira", "description: d", "provider_type: jira"],
+        )
+        reg = SkillRegistry()
+        reg.load_from_directory(str(tmp_path), location="built-in")
+
+        snap = reg.md_snapshot()
+        assert snap[0]["provider"] == "jira"
+        assert snap[0]["qualified_name"] == "jira:jira"
+
+    def test_qualified_name_falls_back_to_source_provider(self, tmp_path):
+        """未声明 provider_type 时回退到 load_from_directory(provider=...)"""
+        _write_skill_md(
+            tmp_path / "preapproval-agent" / "SKILL.md",
+            ["name: preapproval-agent", "description: d"],
+        )
+        reg = SkillRegistry()
+        reg.load_from_directory(str(tmp_path), location="external", provider="smartcmp")
+
+        entry = reg.get_md_skill("smartcmp:preapproval-agent")
+        assert entry is not None
+        assert entry.provider == "smartcmp"
+        assert entry.qualified_name == "smartcmp:preapproval-agent"
+
     def test_list_md_skills(self, tmp_path):
         """list_md_skills 返回名称列表"""
         _write_skill_md(
@@ -457,6 +484,22 @@ class TestPromptBuilderMdSkills:
         """空列表返回空字符串"""
         b = self._builder()
         assert b._build_md_skills_index([]) == ""
+
+    def test_target_md_skill_section_rendered(self):
+        """定向 markdown skill 会写入系统提示"""
+        b = self._builder()
+        output = b.build(
+            md_skills=[_make_md_skill()],
+            target_md_skill={
+                "provider": "smartcmp",
+                "qualified_name": "smartcmp:preapproval-agent",
+                "file_path": "/skills/preapproval-agent/SKILL.md",
+            },
+        )
+
+        assert "Target Markdown Skill" in output
+        assert "smartcmp:preapproval-agent" in output
+        assert "/skills/preapproval-agent/SKILL.md" in output
 
     def test_description_truncation(self):
         """描述超过 desc_max_chars 时截断"""

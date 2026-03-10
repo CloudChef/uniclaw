@@ -545,7 +545,8 @@ async def test_chat_structured_final_messages_emit_and_persist_assistant_text(tm
         SkillDeps(peer_id="user-structured", session_key=session_key),
     )
 
-    assert any(e.type == "assistant" and e.content == "reply:hi" for e in events)
+    assistant_events = [e for e in events if e.type == "assistant"]
+    assert [e.content for e in assistant_events] == ["reply:hi"]
 
     transcript = await manager.load_transcript(session_key)
     assert transcript[-1].role == "assistant"

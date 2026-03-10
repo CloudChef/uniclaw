@@ -127,6 +127,29 @@ class SkillsConfig(BaseModel):
     md_skills_max_file_bytes: int = Field(default=262144, ge=1, description="单个 SKILL.md 文件最大字节数（默认 256KB）")
 
 
+class WebhookSkillSourceConfig(BaseModel):
+    """Additional markdown-skill roots addressable by provider-qualified name."""
+    provider: str = Field(description="Provider namespace used in provider:skill identifiers")
+    root: str = Field(description="Path to the skills root directory")
+
+
+class WebhookSystemConfig(BaseModel):
+    """Per-system webhook access configuration."""
+    system_id: str = Field(description="Stable identifier for the external system")
+    enabled: bool = True
+    sk_env: str = Field(description="Environment variable that stores the shared secret")
+    default_agent_id: str = "main"
+    allowed_skills: list[str] = Field(default_factory=list)
+
+
+class WebhookConfig(BaseModel):
+    """Inbound webhook dispatch configuration."""
+    enabled: bool = False
+    header_name: str = "X-UniClaw-SK"
+    skill_sources: list[WebhookSkillSourceConfig] = Field(default_factory=list)
+    systems: list[WebhookSystemConfig] = Field(default_factory=list)
+
+
 class ModelConfig(BaseModel):
     """modelconfiguration"""
     primary: str = Field(default="doubao-pro-32k", description="主模型（格式: provider/model）")
@@ -195,6 +218,7 @@ class UniclawConfig(BaseModel):
     security: SecurityPolicyConfig = Field(default_factory=SecurityPolicyConfig)
     skills: SkillsConfig = Field(default_factory=SkillsConfig)
     reset: ResetConfig = Field(default_factory=ResetConfig)
+    webhook: WebhookConfig = Field(default_factory=WebhookConfig)
 
     # Auth configuration — loaded from `auth` section of uniclaw.json.
     # None means no auth config present; runtime falls back to anonymous mode.

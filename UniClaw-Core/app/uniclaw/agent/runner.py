@@ -216,6 +216,7 @@ class AgentRunner:
                                 for part in model_response.parts:
                                     if hasattr(part, "content") and part.content:
                                         content = str(part.content)
+                                        assistant_emitted = True
                                         if self.hooks:
                                             await self.hooks.trigger(
                                                 "llm_output",
@@ -380,8 +381,13 @@ class AgentRunner:
         skills = self._collect_skills_snapshot(deps)
         tools = self._collect_tools_snapshot()
         md_skills = self._collect_md_skills_snapshot(deps)
+        target_md_skill = self._collect_target_md_skill(deps)
         return self.prompt_builder.build(
-            session=session, skills=skills, tools=tools, md_skills=md_skills,
+            session=session,
+            skills=skills,
+            tools=tools,
+            md_skills=md_skills,
+            target_md_skill=target_md_skill,
             user_info=deps.user_info,
         )
 
@@ -402,6 +408,12 @@ class AgentRunner:
             if isinstance(value, list):
                 return [item for item in value if isinstance(item, dict)]
         return []
+
+    def _collect_target_md_skill(self, deps: SkillDeps) -> Optional[dict]:
+        """Read a targeted markdown-skill descriptor from `deps.extra` if present."""
+        extra = deps.extra if isinstance(deps.extra, dict) else {}
+        value = extra.get("target_md_skill")
+        return value if isinstance(value, dict) else None
 
     def _collect_tools_snapshot(self) -> list[dict]:
         """Collect tool name and description pairs for prompt building."""

@@ -83,3 +83,41 @@ class TestSessionManagerIsolation:
         default_metadata = legacy_sessions_dir / "default" / "sessions.json"
         assert default_metadata.exists()
         assert not (legacy_sessions_dir / "sessions.json").exists()
+
+    @pytest.mark.asyncio
+    async def test_blank_metadata_file_is_treated_as_empty(self, tmp_path):
+        agents_dir = tmp_path / "agents"
+        sessions_dir = agents_dir / "main" / "sessions" / "default"
+        sessions_dir.mkdir(parents=True)
+        (sessions_dir / "sessions.json").write_text("", encoding="utf-8")
+
+        manager = SessionManager(
+            agents_dir=str(agents_dir),
+            agent_id="main",
+            user_id="default",
+            reset_mode=ResetMode.MANUAL,
+        )
+
+        await manager._load_metadata()
+
+        assert manager._metadata_cache == {}
+
+    @pytest.mark.asyncio
+    async def test_save_metadata_uses_atomic_replace(self, tmp_path):
+        agents_dir = tmp_path / "agents"
+        manager = SessionManager(
+            agents_dir=str(agents_dir),
+            agent_id="main",
+            user_id="default",
+            reset_mode=ResetMode.MANUAL,
+        )
+
+        await manager.get_or_create("agent:main:user:alice:api:dm:bob")
+
+        metadata_path = agents_dir / "main" / "sessions" / "default" / "sessions.json"
+        tmp_path_file = metadata_path.with_suffix(".json.tmp")
+
+        assert metadata_path.exists()
+        assert not tmp_path_file.exists()
+        data = json.loads(metadata_path.read_text(encoding="utf-8"))
+        assert "agent:main:user:alice:api:dm:bob" in data

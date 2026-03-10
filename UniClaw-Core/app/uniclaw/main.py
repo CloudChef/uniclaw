@@ -22,6 +22,7 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.uniclaw.api.routes import create_router, APIContext, install_request_validation_logging, set_api_context
+from app.uniclaw.api.webhook_dispatch import WebhookDispatchManager
 from app.uniclaw.session.manager import SessionManager
 from app.uniclaw.session.queue import SessionQueue
 from app.uniclaw.skills.registry import SkillRegistry
@@ -29,7 +30,7 @@ from app.uniclaw.tools.registration import register_builtin_tools
 from app.uniclaw.tools.catalog import ToolProfile
 from app.uniclaw.agent.runner import AgentRunner
 from app.uniclaw.agent.prompt_builder import PromptBuilder, PromptBuilderConfig
-from app.uniclaw.core.config import get_config
+from app.uniclaw.core.config import get_config, get_config_path
 from app.uniclaw.core.provider_registry import ServiceProviderRegistry
 
 
@@ -49,6 +50,7 @@ async def lifespan(app: FastAPI):
     global _session_manager, _session_queue, _skill_registry, _agent_runner, _global_provider_registry
     
     config = get_config()
+    config_root = get_config_path().parent if get_config_path() is not None else Path.cwd()
     
     _session_manager = SessionManager(agents_dir=config.agents_dir)
     _session_queue = SessionQueue()
@@ -78,6 +80,17 @@ async def lifespan(app: FastAPI):
                 provider_skills = provider_path / "skills"
                 if provider_skills.exists():
                     _skill_registry.load_from_directory(str(provider_skills), location="built-in")
+
+    # 1b. Additional webhook skill roots (provider-qualified markdown skills)
+    if config.webhook.enabled and config.webhook.skill_sources:
+        for source in config.webhook.skill_sources:
+            source_root = (config_root / source.root).resolve()
+            if source_root.exists():
+                _skill_registry.load_from_directory(
+                    str(source_root),
+                    location="external",
+                    provider=source.provider,
+                )
     
     # 2. Workspace skills (project-specific, highest priority)
     workspace_skills = Path.cwd() / "skills"
@@ -161,6 +174,9 @@ async def lifespan(app: FastAPI):
         prompt_builder=prompt_builder,
         session_queue=_session_queue,
     )
+
+    webhook_manager = WebhookDispatchManager(config.webhook, _skill_registry)
+    webhook_manager.validate_startup()
     
     print(f"[UniClaw] Agent created with model: {pydantic_model}")
     
@@ -172,6 +188,7 @@ async def lifespan(app: FastAPI):
         service_provider_registry=_global_provider_registry,
         available_providers=available_providers,
         provider_instances=provider_instances,
+        webhook_manager=webhook_manager,
     )
     set_api_context(api_context)
     

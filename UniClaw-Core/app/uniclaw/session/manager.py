@@ -135,6 +135,9 @@ class SessionManager:
             try:
                 async with aiofiles.open(metadata_path, "r", encoding="utf-8") as f:
                     content = await f.read()
+                    if not content.strip():
+                        self._loaded = True
+                        return
                     data = json.loads(content)
                     for key, value in data.items():
                         self._metadata_cache[key] = SessionMetadata.from_dict(value)
@@ -147,11 +150,13 @@ class SessionManager:
         """Persist the in-memory metadata cache to disk."""
         await self._ensure_dir()
         metadata_path = self.sessions_dir / self.METADATA_FILE
+        tmp_path = metadata_path.with_suffix(f"{metadata_path.suffix}.tmp")
         
         data = {key: meta.to_dict() for key, meta in self._metadata_cache.items()}
-        
-        async with aiofiles.open(metadata_path, "w", encoding="utf-8") as f:
+
+        async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
             await f.write(json.dumps(data, ensure_ascii=False, indent=2))
+        await aiofiles.os.replace(tmp_path, metadata_path)
     
     def _get_transcript_path(self, session: SessionMetadata) -> Path:
         """Return the transcript file path for a session."""

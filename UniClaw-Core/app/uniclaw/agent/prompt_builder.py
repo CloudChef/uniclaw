@@ -106,6 +106,7 @@ class PromptBuilder:
         skills: Optional[list[dict]] = None,
         tools: Optional[list[dict]] = None,
         md_skills: Optional[list[dict]] = None,
+        target_md_skill: Optional[dict] = None,
         user_info: Optional["UserInfo"] = None,
     ) -> str:
         """
@@ -151,6 +152,9 @@ class PromptBuilder:
                 md_index = self._build_md_skills_index(md_skills)
                 if md_index:
                     parts.append(md_index)
+
+            if target_md_skill:
+                parts.append(self._build_target_md_skill(target_md_skill))
             
             # 5. Self-update instructions
             parts.append(self._build_self_update())
@@ -187,6 +191,22 @@ class PromptBuilder:
         parts.append(self._build_runtime_info())
         
         return "\n\n".join(p for p in parts if p)
+
+    def _build_target_md_skill(self, target_md_skill: dict[str, str]) -> str:
+        """Build a focused section for webhook-directed markdown skill execution."""
+        qualified_name = target_md_skill.get("qualified_name", "")
+        file_path = target_md_skill.get("file_path", "")
+        provider = target_md_skill.get("provider", "")
+        lines = ["## Target Markdown Skill", ""]
+        if qualified_name:
+            lines.append(f"Qualified name: {qualified_name}")
+        if provider:
+            lines.append(f"Provider: {provider}")
+        if file_path:
+            lines.append(f"File path: {file_path}")
+        lines.append("You must execute only this markdown skill for the current run.")
+        lines.append("Read the SKILL.md first before taking any other action.")
+        return "\n".join(lines)
     
     def _build_user_context(self, user_info: "UserInfo") -> str:
         """Build a user identity section for the current authenticated operator."""

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from app.uniclaw.session.manager import SessionManager
 
 
-@dataclass
+@dataclass(init=False)
 class SkillDeps:
     """
     Request-scoped dependencies for ``RunContext[SkillDeps]``.
@@ -76,6 +76,49 @@ class SkillDeps:
     session_manager: Optional[Any] = None   # SessionManager injected by caller (per-user scoped)
     memory_manager: Optional[Any] = None    # MemoryManager injected by caller (per-user scoped)
     extra: dict[str, Any] = field(default_factory=dict)
+
+    def __init__(
+        self,
+        user_info: Optional[UserInfo] = None,
+        *,
+        user_token: Optional[str] = None,
+        smartcmp_client: Optional[Any] = None,
+        peer_id: str = "",
+        session_key: str = "",
+        channel: str = "",
+        abort_signal: Optional[asyncio.Event] = None,
+        session_manager: Optional[Any] = None,
+        memory_manager: Optional[Any] = None,
+        extra: Optional[dict[str, Any]] = None,
+    ) -> None:
+        resolved_user = user_info or ANONYMOUS_USER
+        token = resolved_user.raw_token if user_token is None else str(user_token)
+        if resolved_user is ANONYMOUS_USER:
+            resolved_user = UserInfo(
+                user_id="anonymous",
+                display_name=ANONYMOUS_USER.display_name,
+                raw_token=token,
+            )
+        elif token != resolved_user.raw_token:
+            resolved_user = UserInfo(
+                user_id=resolved_user.user_id,
+                display_name=resolved_user.display_name,
+                tenant_id=resolved_user.tenant_id,
+                roles=list(resolved_user.roles),
+                raw_token=token,
+                provider_subject=resolved_user.provider_subject,
+                extra=dict(resolved_user.extra),
+            )
+
+        self.user_info = resolved_user
+        self.smartcmp_client = smartcmp_client
+        self.peer_id = peer_id
+        self.session_key = session_key
+        self.channel = channel
+        self.abort_signal = abort_signal or asyncio.Event()
+        self.session_manager = session_manager
+        self.memory_manager = memory_manager
+        self.extra = dict(extra or {})
 
     # ------------------------------------------------------------------
     # Backward-compatibility shim

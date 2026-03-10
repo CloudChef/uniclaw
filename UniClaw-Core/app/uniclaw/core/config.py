@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 from typing import Optional, Any
 from pydantic import ValidationError
+from dotenv import load_dotenv
 
 from app.uniclaw.core.config_schema import UniclawConfig
 
@@ -61,10 +62,11 @@ initializeConfiguration manager
             config_path:configurationfile path(optional)
         
 """
-        self._config_path = config_path
+        self._config_path = config_path or os.environ.get("UNICLAW_CONFIG")
         self._config: UniclawConfig = UniclawConfig()
         self._runtime_overrides: dict[str, Any] = {}
         self._loaded = False
+        self._resolved_config_path: Optional[Path] = None
     
     @property
     def config(self) -> UniclawConfig:
@@ -72,6 +74,13 @@ initializeConfiguration manager
         if not self._loaded:
             self.load()
         return self._config
+
+    @property
+    def resolved_config_path(self) -> Optional[Path]:
+        """Return the absolute path of the config file that was loaded, if any."""
+        if not self._loaded:
+            self.load()
+        return self._resolved_config_path
     
     def load(self) -> UniclawConfig:
         """
@@ -167,6 +176,8 @@ get configuration
             path = Path(path_str).expanduser()
             if path.exists():
                 try:
+                    self._resolved_config_path = path.resolve()
+                    self._load_sidecar_dotenv(self._resolved_config_path)
                     with open(path, "r", encoding="utf-8") as f:
                         if path.suffix == ".json":
                             return json.load(f)
@@ -182,6 +193,13 @@ get configuration
                     print(f"[ConfigManager] 读取配置文件失败 {path}: {e}")
                     continue
         return None
+
+    @staticmethod
+    def _load_sidecar_dotenv(config_path: Path) -> None:
+        """Load `.env` next to the resolved config file without overriding existing env vars."""
+        dotenv_path = config_path.parent / ".env"
+        if dotenv_path.is_file():
+            load_dotenv(dotenv_path=dotenv_path, override=False)
     
     def _load_from_env(self) -> dict:
         """
@@ -268,3 +286,8 @@ def get_config_manager() -> ConfigManager:
 def get_config() -> UniclawConfig:
     """get configuration"""
     return get_config_manager().config
+
+
+def get_config_path() -> Optional[Path]:
+    """Return the resolved config file path for the active config manager."""
+    return get_config_manager().resolved_config_path

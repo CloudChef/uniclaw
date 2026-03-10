@@ -118,6 +118,8 @@ class MdSkillEntry:
     name: str
     description: str
     file_path: str
+    provider: str = ""
+    qualified_name: str = ""
     location: str = "built-in"
     metadata: dict[str, str] = field(default_factory=dict)
 
@@ -321,6 +323,7 @@ from count JSON Schema
         directory: str,
         location: str = "built-in",
         *,
+        provider: Optional[str] = None,
         max_file_bytes: int = _DEFAULT_MAX_FILE_BYTES,
     ) -> int:
         """Load skills from SKILL.md metadata in the target directory.
@@ -332,7 +335,12 @@ from count JSON Schema
         if not path.exists():
             return 0
 
-        return self._load_md_skills(path, location, max_file_bytes=max_file_bytes)
+        return self._load_md_skills(
+            path,
+            location,
+            provider=provider,
+            max_file_bytes=max_file_bytes,
+        )
     # ------------------------------------------------------------------
     # MD Skills
     # ------------------------------------------------------------------
@@ -342,6 +350,7 @@ from count JSON Schema
         base_path: Path,
         location: str,
         *,
+        provider: Optional[str],
         max_file_bytes: int = _DEFAULT_MAX_FILE_BYTES,
     ) -> int:
         """
@@ -369,6 +378,7 @@ MD Skills.
                 skill_file,
                 location,
                 is_directory_skill=True,
+                provider=provider,
                 max_file_bytes=max_file_bytes,
             ):
                 count += 1
@@ -381,6 +391,7 @@ MD Skills.
                 md_file,
                 location,
                 is_directory_skill=False,
+                provider=provider,
                 max_file_bytes=max_file_bytes,
             ):
                 count += 1
@@ -393,6 +404,7 @@ MD Skills.
         location: str,
         *,
         is_directory_skill: bool,
+        provider: Optional[str],
         max_file_bytes: int,
     ) -> bool:
         """
@@ -464,26 +476,31 @@ single MD Skill.
             if k not in ("name", "description")
         }
 
+        provider_name = str(metadata.get("provider_type", "")).strip() or (provider or "").strip()
+        qualified_name = f"{provider_name}:{name}" if provider_name else name
+
         # :location >=
-        if name in self._md_skills:
-            existing = self._md_skills[name]
+        if qualified_name in self._md_skills:
+            existing = self._md_skills[qualified_name]
             if not self._should_override(existing.location, location):
                 return False
-            self._unregister_md_skill_tools(name)
+            self._unregister_md_skill_tools(existing.qualified_name)
 
         entry = MdSkillEntry(
             name=name,
             description=description,
             file_path=str(file_path.resolve()),
+            provider=provider_name,
+            qualified_name=qualified_name,
             location=location,
             metadata=metadata,
         )
-        self._md_skills[name] = entry
+        self._md_skills[qualified_name] = entry
         self._register_executable_tools_from_md(entry)
         return True
 
-    def _unregister_md_skill_tools(self, skill_name: str) -> None:
-        tool_names = self._md_skill_tools.pop(skill_name, set())
+    def _unregister_md_skill_tools(self, qualified_name: str) -> None:
+        tool_names = self._md_skill_tools.pop(qualified_name, set())
         for tool_name in tool_names:
             self.unregister(tool_name)
 
@@ -530,7 +547,7 @@ single MD Skill.
             )
 
         if registered:
-            self._md_skill_tools[entry.name] = registered
+            self._md_skill_tools[entry.qualified_name] = registered
 
     def _register_md_tool_entry(
         self,
@@ -569,7 +586,7 @@ single MD Skill.
             description=entry.description,
             category=str(entry.metadata.get("category", "skill")),
             location=entry.location,
-            provider_type=(str(entry.metadata.get("provider_type", "")).strip() or None),
+            provider_type=(str(entry.metadata.get("provider_type", "")).strip() or entry.provider or None),
             instance_required=str(entry.metadata.get("instance_required", "")).lower() in ("1", "true", "yes"),
         )
         self.register(meta, handler)
@@ -621,7 +638,7 @@ location entry.
         :workspace > user > built-in
         
 """
-        priority = {"built-in": 0, "user": 1, "workspace": 2}
+        priority = {"built-in": 0, "external": 1, "user": 2, "workspace": 3}
         return priority.get(new_location, 0) >= priority.get(existing_location, 0)
 
     # ------------------------------------------------------------------
@@ -643,6 +660,8 @@ return MD Skills metadatasnapshot.
         return [
             {
                 "name": entry.name,
+                "provider": entry.provider,
+                "qualified_name": entry.qualified_name,
                 "description": entry.description,
                 "file_path": entry.file_path,
                 "location": entry.location,
@@ -653,7 +672,21 @@ return MD Skills metadatasnapshot.
 
     def list_md_skills(self) -> list[str]:
         """return MD Skill namelist."""
+        return [entry.name for entry in self._md_skills.values()]
+
+    def list_md_qualified_skills(self) -> list[str]:
+        """Return all provider-qualified markdown skill identifiers."""
         return list(self._md_skills.keys())
+
+    def get_md_skill(self, identifier: str) -> Optional[MdSkillEntry]:
+        """Resolve a markdown skill by qualified name or, when unique, bare name."""
+        if identifier in self._md_skills:
+            return self._md_skills[identifier]
+
+        matches = [entry for entry in self._md_skills.values() if entry.name == identifier]
+        if len(matches) == 1:
+            return matches[0]
+        return None
     
     def list_skills(self) -> list[str]:
         """
@@ -665,7 +698,6 @@ register name
         
 """
         return list(self._skills.keys())
-
 
 
 
