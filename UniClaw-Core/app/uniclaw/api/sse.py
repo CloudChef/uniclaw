@@ -79,6 +79,7 @@ Stream state
     event_count: int = 0
     started_at: float = field(default_factory=time.time)
     events: list[SSEEvent] = field(default_factory=list)
+    closed: bool = False
     
     def add_event(self, event: SSEEvent) -> None:
         """"""
@@ -213,6 +214,10 @@ to
             run_id:run ID
         
 """
+        stream = self._streams.get(run_id)
+        if stream:
+            stream.closed = True
+
         # 
         queues = self._subscribers.get(run_id, [])
         for queue in queues:
@@ -291,20 +296,16 @@ create SSE
         if run_id not in self._subscribers:
             self._subscribers[run_id] = []
         self._subscribers[run_id].append(queue)
+        was_closed_on_subscribe = stream.closed
         
         try:
-            # :
-            if last_event_id:
-                missed_events = self._get_missed_events(stream, last_event_id)
-                for event in missed_events:
-                    yield event.to_sse_format()
-                    
-            # heartbeat
-            yield SSEEvent(
-                event_type=SSEEventType.HEARTBEAT,
-                data={"timestamp": datetime.now(timezone.utc).isoformat()}
-            ).to_sse_format()
-            
+            replay_events = self._get_missed_events(stream, last_event_id)
+            for event in replay_events:
+                yield event.to_sse_format()
+
+            if was_closed_on_subscribe:
+                return
+
             # 
             start_time = time.time()
             
@@ -355,6 +356,9 @@ create SSE
         last_event_id: str
     ) -> list[SSEEvent]:
         """get(used for resume-from-breakpoint)"""
+        if not last_event_id:
+            return list(stream.events)
+
         missed = []
         found = False
         

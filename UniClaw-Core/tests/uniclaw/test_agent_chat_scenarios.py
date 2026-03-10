@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 
 from app.uniclaw.agent.runner import AgentRunner
 from app.uniclaw.core.deps import SkillDeps
@@ -241,6 +242,17 @@ class _GrowingMessagesAgent:
         ]
         nodes = [_ToolNode("search"), _TextNode("已完成处理")]
         return _ProgressiveAgentRun(nodes, snapshots)
+
+
+class _StructuredFinalMessageAgent:
+    """Emit no node text and return structured PydanticAI messages at the end."""
+
+    def iter(self, user_message, deps, message_history):
+        final_messages = [
+            ModelRequest(parts=[UserPromptPart(user_message)]),
+            ModelResponse(parts=[TextPart(f"reply:{user_message}")]),
+        ]
+        return _FakeAgentRun([], final_messages)
 
 
 async def _collect_events(runner: AgentRunner, session_key: str, user_message: str, deps: SkillDeps):
@@ -517,3 +529,24 @@ async def test_chat_inloop_compaction_keeps_messages_after_compaction_point(tmp_
     assert transcript[0].content.startswith("[压缩摘要]")
     assert transcript[-1].role == "assistant"
     assert transcript[-1].content == "已完成处理"
+
+
+@pytest.mark.asyncio
+async def test_chat_structured_final_messages_emit_and_persist_assistant_text(tmp_path):
+    """Convert final ModelResponse.parts text into assistant events and persisted transcript."""
+    manager = SessionManager(agents_dir=str(tmp_path), agent_id="main")
+    runner = AgentRunner(agent=_StructuredFinalMessageAgent(), session_manager=manager)
+
+    session_key = "agent:main:telegram:dm:user-structured"
+    events = await _collect_events(
+        runner,
+        session_key,
+        "hi",
+        SkillDeps(peer_id="user-structured", session_key=session_key),
+    )
+
+    assert any(e.type == "assistant" and e.content == "reply:hi" for e in events)
+
+    transcript = await manager.load_transcript(session_key)
+    assert transcript[-1].role == "assistant"
+    assert transcript[-1].content == "reply:hi"
