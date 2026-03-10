@@ -1,0 +1,98 @@
+[UniClaw] Registered 19 built-in tools
+[UniClaw] Agent created with model: openai:deepseek-chat
+[UniClaw] Application started successfully
+[UniClaw] Session storage: C:\Users\gangw\.uniclaw\agents\main\sessions\default
+[UniClaw] Skills loaded: 23 executable, 1 markdown
+INFO:     127.0.0.1:54867 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60119 - "POST /api/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60119 - "POST /api/agent/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60119 - "GET /api/agent/runs/7fe4bd0e-d176-4a8d-a23e-6aa4adc7c12e/stream HTTP/1.1" 200 OK
+[AgentRunner] _run_iter_with_optional_override called
+[AgentRunner] user_message: ????Jira ?issue??????????????????????????????????????...
+[AgentRunner] message_history: 0 messages
+[AgentRunner] TypeError creating override, using nullcontext
+[AgentRunner] Using async context manager
+[AgentRunner] Calling agent.iter()...
+[AgentRunner] agent.iter() returned, yielding agent_run
+[AgentRunner] Starting agent iteration...
+[AgentRunner] Node 1: UserPromptNode
+[AgentRunner] Node 2: ModelRequestNode
+[AgentRunner] Node 3: CallToolsNode
+[AgentRunner] Node 4: ModelRequestNode
+[AgentRunner] Node 5: CallToolsNode
+[AgentRunner] Node 6: ModelRequestNode
+[AgentRunner] Node 7: CallToolsNode
+[AgentRunner] Node 8: End
+INFO:     127.0.0.1:61692 - "POST /api/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61692 - "POST /api/agent/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61692 - "GET /api/agent/runs/b698e172-9e26-47df-baa8-f049cd535553/stream HTTP/1.1" 200 OK
+[AgentRunner] _run_iter_with_optional_override called
+[AgentRunner] user_message: ????Jira ?issue??????????????????????????????????????...
+[AgentRunner] message_history: 6 messages
+[AgentRunner] TypeError creating override, using nullcontext
+[AgentRunner] Using async context manager
+[AgentRunner] Calling agent.iter()...
+[AgentRunner] agent.iter() returned, yielding agent_run
+[AgentRunner] Starting agent iteration...
+[AgentRunner] Node 1: UserPromptNode
+[AgentRunner] Node 2: ModelRequestNode
+[AgentRunner] Node 3: CallToolsNode
+[AgentRunner] Node 4: ModelRequestNode
+[AgentRunner] Node 5: CallToolsNode
+[AgentRunner] Node 6: End
+INFO:     127.0.0.1:58663 - "POST /api/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58663 - "POST /api/agent/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58663 - "GET /api/agent/runs/464cbee5-1d2c-48b9-b9c9-09a2863fe43e/stream HTTP/1.1" 200 OK
+[AgentRunner] _run_iter_with_optional_override called
+[AgentRunner] user_message: ????? jira_issue_create ?? issue?summary=??????, description=??????????????, issue_type=Bug, project...
+[AgentRunner] message_history: 4 messages
+[AgentRunner] TypeError creating override, using nullcontext
+[AgentRunner] Using async context manager
+[AgentRunner] Calling agent.iter()...
+[AgentRunner] agent.iter() returned, yielding agent_run
+[AgentRunner] Starting agent iteration...
+[AgentRunner] Node 1: UserPromptNode
+[AgentRunner] Node 2: ModelRequestNode
+[AgentRunner] Node 3: CallToolsNode
+[jira_issue_create] extra keys: ['_service_provider_registry', 'available_providers', 'skills_snapshot', 'md_skills_snapshot']
+[jira_issue_create] provider_instance: NOT SET
+INFO:     127.0.0.1:57619 - "POST /api/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57619 - "POST /api/agent/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57619 - "GET /api/agent/runs/061bbcce-e3f9-41f0-a349-2f7bcdf0cc07/stream HTTP/1.1" 200 OK
+[AgentRunner] _run_iter_with_optional_override called
+[AgentRunner] user_message: ?????Jira issue???????????????????????????????...
+[AgentRunner] message_history: 4 messages
+[AgentRunner] TypeError creating override, using nullcontext
+[AgentRunner] Using async context manager
+[AgentRunner] Calling agent.iter()...
+[AgentRunner] agent.iter() returned, yielding agent_run
+[AgentRunner] Starting agent iteration...
+[AgentRunner] Node 1: UserPromptNode
+[AgentRunner] Node 2: ModelRequestNode
+[AgentRunner] Node 3: CallToolsNode
+[AgentRunner] Node 4: ModelRequestNode
+[AgentRunner] Node 5: CallToolsNode
+[AgentRunner] Node 6: ModelRequestNode
+[AgentRunner] Node 7: CallToolsNode
+[AgentRunner] Node 8: End
+INFO:     127.0.0.1:61819 - "GET /api/skills HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51118 - "POST /api/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51118 - "POST /api/agent/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51118 - "GET /api/agent/runs/644cb154-f413-4a0a-a67a-d42b9c67301a/stream HTTP/1.1" 200 OK
+[AgentRunner] _run_iter_with_optional_override called
+[AgentRunner] user_message: ?? list_provider_instances ???provider_type=jira???????????...
+[AgentRunner] message_history: 6 messages
+[AgentRunner] TypeError creating override, using nullcontext
+[AgentRunner] Using async context manager
+[AgentRunner] Calling agent.iter()...
+[AgentRunner] agent.iter() returned, yielding agent_run
+[AgentRunner] Starting agent iteration...
+[AgentRunner] Node 1: UserPromptNode
+[AgentRunner] Node 2: ModelRequestNode
+[AgentRunner] Node 3: CallToolsNode
+[AgentRunner] Node 4: ModelRequestNode
+[AgentRunner] Node 5: CallToolsNode
+[AgentRunner] Node 6: End
+INFO:     127.0.0.1:58747 - "POST /api/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58747 - "POST /api/agent/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58747 - "GET /api/agent/runs/5d2e8d46-a70a-4861-8c98-e36b42649d33/stream HTTP/1.1" 200 OK

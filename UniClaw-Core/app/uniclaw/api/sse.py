@@ -49,9 +49,14 @@ SSE event
     
     def to_sse_format(self) -> dict[str, Any]:
         """SSE for mat"""
+        def safe_serialize(obj: Any) -> Any:
+            if hasattr(obj, '__dict__'):
+                return str(obj)
+            return obj
+        
         result: dict[str, Any] = {
             "event": self.event_type.value,
-            "data": json.dumps(self.data, ensure_ascii=False)
+            "data": json.dumps(self.data, ensure_ascii=False, default=safe_serialize)
         }
         if self.event_id:
             result["id"] = self.event_id

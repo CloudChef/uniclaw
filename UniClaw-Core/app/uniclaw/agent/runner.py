@@ -154,8 +154,11 @@ class AgentRunner:
                     message_history=message_history,
                     system_prompt=system_prompt,
                 ) as agent_run:
-
+                    print(f"[AgentRunner] Starting agent iteration...")
+                    node_count = 0
                     async for node in agent_run:
+                        node_count += 1
+                        print(f"[AgentRunner] Node {node_count}: {type(node).__name__}")
                         # -- checkpoint 1:abort_signal --
                         if deps.is_aborted():
                             yield StreamEvent.lifecycle_aborted()
@@ -206,7 +209,22 @@ class AgentRunner:
                             )
 
                         # Emit model output chunks as assistant deltas.
-                        if hasattr(node, "content") and node.content:
+                        if hasattr(node, "model_response") and node.model_response:
+                            model_response = node.model_response
+                            if hasattr(model_response, "parts"):
+                                for part in model_response.parts:
+                                    if hasattr(part, "content") and part.content:
+                                        content = str(part.content)
+                                        if self.hooks:
+                                            await self.hooks.trigger(
+                                                "llm_output",
+                                                {
+                                                    "session_key": session_key,
+                                                    "content": content,
+                                                },
+                                            )
+                                        yield StreamEvent.assistant_delta(content)
+                        elif hasattr(node, "content") and node.content:
                             content = str(node.content)
                             if self.hooks:
                                 await self.hooks.trigger(
@@ -219,9 +237,21 @@ class AgentRunner:
                             yield StreamEvent.assistant_delta(content)
 
                         # Surface tool activity in the event stream.
-                        if hasattr(node, "tool_name"):
+                        tool_calls_in_node = []
+                        if hasattr(node, "tool_call_metadata") and node.tool_call_metadata:
+                            tool_calls_in_node = node.tool_call_metadata
+                        elif hasattr(node, "tool_calls") and node.tool_calls:
+                            tool_calls_in_node = node.tool_calls
+                        elif hasattr(node, "tool_name"):
+                            tool_calls_in_node = [{"name": str(node.tool_name)}]
+                        
+                        for tc in tool_calls_in_node:
                             tool_calls_count += 1
-                            tool_name = str(node.tool_name)
+                            if isinstance(tc, dict):
+                                tool_name = tc.get("name", tc.get("tool_name", "unknown_tool"))
+                            else:
+                                tool_name = getattr(tc, "tool_name", getattr(tc, "name", "unknown_tool"))
+                            tool_name = str(tool_name)
 
                             # Abort before starting another tool when requested.
                             if deps.is_aborted():
@@ -292,25 +322,36 @@ class AgentRunner:
         system_prompt: str,
     ):
         """Run `agent.iter()` with optional system-prompt overrides."""
+        print(f"[AgentRunner] _run_iter_with_optional_override called")
+        print(f"[AgentRunner] user_message: {user_message[:100]}...")
+        print(f"[AgentRunner] message_history: {len(message_history)} messages")
+        
         override_factory = getattr(self.agent, "override", None)
         if callable(override_factory) and system_prompt:
             try:
                 override_cm = override_factory(system_prompt=system_prompt)
+                print(f"[AgentRunner] Created override context manager")
             except TypeError:
                 override_cm = nullcontext()
+                print(f"[AgentRunner] TypeError creating override, using nullcontext")
         else:
             override_cm = nullcontext()
+            print(f"[AgentRunner] No override factory or no system_prompt")
 
         if hasattr(override_cm, "__aenter__"):
+            print(f"[AgentRunner] Using async context manager")
             async with override_cm:
+                print(f"[AgentRunner] Calling agent.iter()...")
                 async with self.agent.iter(
                     user_message,
                     deps=deps,
                     message_history=message_history,
                 ) as agent_run:
+                    print(f"[AgentRunner] agent.iter() returned, yielding agent_run")
                     yield agent_run
             return
 
+        print(f"[AgentRunner] Using sync context manager")
         with override_cm:
             async with self.agent.iter(
                 user_message,
@@ -384,7 +425,17 @@ class AgentRunner:
             }
             tool_calls = getattr(msg, "tool_calls", None)
             if tool_calls:
-                item["tool_calls"] = tool_calls
+                normalized_tool_calls = []
+                for tc in tool_calls:
+                    if isinstance(tc, dict):
+                        normalized_tool_calls.append(tc)
+                    else:
+                        normalized_tool_calls.append({
+                            "id": getattr(tc, "id", ""),
+                            "name": getattr(tc, "name", getattr(tc, "tool_name", "")),
+                            "args": getattr(tc, "args", {}),
+                        })
+                item["tool_calls"] = normalized_tool_calls
             normalized.append(item)
         return normalized
 
@@ -420,7 +471,7 @@ class AgentRunner:
                 user_message,
                 deps=deps,
             )
-            return result.data if hasattr(result, "data") else str(result)
+            return result.output if hasattr(result, "output") else str(result)
         except Exception as e:
             return f"[错误: {str(e)}]"
 

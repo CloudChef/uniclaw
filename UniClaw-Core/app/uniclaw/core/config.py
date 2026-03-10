@@ -260,7 +260,8 @@ def get_config_manager() -> ConfigManager:
     """get Configuration managerinstance"""
     global _config_manager
     if _config_manager is None:
-        _config_manager = ConfigManager()
+        config_path = os.environ.get("UNICLAW_CONFIG")
+        _config_manager = ConfigManager(config_path=config_path)
     return _config_manager
 
 

@@ -2,7 +2,7 @@ node_modules/
 dist/
 openspec/
 .qoder/
-
+.sisyphus/
 *.pyc
 *.pyo
 *.pyd

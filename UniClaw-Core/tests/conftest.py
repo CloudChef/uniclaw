@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Pytest 配置文件
+Pytest 閰嶇疆鏂囦欢
 
-配置 pytest fixtures 和插件。
+閰嶇疆 pytest fixtures 鍜屾彃浠躲€?
 """
 
 import asyncio
@@ -12,14 +12,17 @@ from pathlib import Path
 
 import pytest
 
-# 添加项目根目录到 Python 路径
+# 娣诲姞椤圭洰鏍圭洰褰曞埌 Python 璺緞
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+# Default all tests to tests/uniclaw.test.json unless caller overrides UNICLAW_CONFIG
+os.environ.setdefault('UNICLAW_CONFIG', str((Path(__file__).parent / 'uniclaw.test.json').resolve()))
+
 
 
 @pytest.fixture(scope="session")
 def event_loop():
-    """创建事件循环 fixture"""
+    """鍒涘缓浜嬩欢寰幆 fixture"""
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
@@ -27,25 +30,25 @@ def event_loop():
 
 @pytest.fixture
 def anyio_backend():
-    """指定 anyio 后端"""
+    """鎸囧畾 anyio 鍚庣"""
     return "asyncio"
 
 
 @pytest.fixture(scope="session")
 def test_config_path():
-    """测试配置文件路径"""
+    """娴嬭瘯閰嶇疆鏂囦欢璺緞"""
     return Path(__file__).parent / "uniclaw.test.json"
 
 
 @pytest.fixture(scope="session")
 def kimi_env_vars():
-    """Kimi LLM 环境变量配置
+    """Kimi LLM 鐜鍙橀噺閰嶇疆
     
-    优先级:
-    1. 环境变量 ANTHROPIC_BASE_URL, ANTHROPIC_API_KEY
-    2. tests/uniclaw.test.json 配置文件
+    浼樺厛绾?
+    1. 鐜鍙橀噺 ANTHROPIC_BASE_URL, ANTHROPIC_API_KEY
+    2. tests/uniclaw.test.json 閰嶇疆鏂囦欢
     
-    使用方式:
+    浣跨敤鏂瑰紡:
        $env:ANTHROPIC_BASE_URL="https://api.moonshot.cn/anthropic"
        $env:ANTHROPIC_API_KEY="sk-kimi-xxx"
        pytest -m llm
@@ -55,7 +58,7 @@ def kimi_env_vars():
     base_url = os.environ.get("ANTHROPIC_BASE_URL")
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     
-    # 如果环境变量未设置，从测试配置文件读取
+    # 濡傛灉鐜鍙橀噺鏈缃紝浠庢祴璇曢厤缃枃浠惰鍙?
     if not base_url or not api_key:
         test_config_path = Path(__file__).parent / "uniclaw.test.json"
         if test_config_path.exists():
@@ -78,14 +81,14 @@ def kimi_env_vars():
 
 @pytest.fixture
 def skill_registry():
-    """创建空的 SkillRegistry"""
+    """鍒涘缓绌虹殑 SkillRegistry"""
     from app.uniclaw.skills.registry import SkillRegistry
     return SkillRegistry()
 
 
 @pytest.fixture
 def sample_skill_handler():
-    """示例 skill handler，使用 RunContext 类型注解"""
+    """绀轰緥 skill handler锛屼娇鐢?RunContext 绫诲瀷娉ㄨВ"""
     from typing import TYPE_CHECKING
     
     if TYPE_CHECKING:
@@ -93,15 +96,15 @@ def sample_skill_handler():
         from app.uniclaw.core.deps import SkillDeps
     
     async def handler(ctx: "RunContext[SkillDeps]", query: str) -> dict:
-        """示例工具函数"""
+        """绀轰緥宸ュ叿鍑芥暟"""
         return {"result": f"Processed: {query}"}
     
     return handler
 
 
-# pytest 配置
+# pytest 閰嶇疆
 def pytest_configure(config):
-    """配置 pytest markers"""
+    """閰嶇疆 pytest markers"""
     config.addinivalue_line(
         "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
     )

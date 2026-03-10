@@ -1,8 +1,8 @@
-# UniClaw
+﻿# UniClaw
 
 UniClaw is an enterprise agent framework that lets employees interact with multiple enterprise systems through one conversational AI interface. Instead of switching between separate consoles, dashboards, and approval portals, users can use natural language to trigger workflows, query operational data, and complete cross-system tasks from a single entry point.
 
-This repository contains the `smartcmp-ai` implementation of the UniClaw core, including the agent runtime, API layer, channel adapters, provider registry, skills, tools, and session/memory management.
+This repository contains the UniClaw core implementation, including the agent runtime, API layer, channel adapters, provider registry, skills, tools, and session/memory management.
 
 ## Background
 
@@ -88,17 +88,17 @@ The core runtime in this repository centers on:
 
 ```text
 project-root/
-├── app/uniclaw/api/         # REST, SSE, WebSocket, gateway orchestration
-├── app/uniclaw/agent/       # Agent runner, routing, streaming, prompt building
-├── app/uniclaw/channels/    # Channel adapters and registries
-├── app/uniclaw/core/        # Config, execution context, provider registry
-├── app/uniclaw/memory/      # Memory manager and retrieval
-├── app/uniclaw/session/     # Session context, queue, and manager
-├── app/uniclaw/skills/      # Skill loading and registry
-├── app/uniclaw/tools/       # Built-in tools and tool catalog
-├── app/uniclaw/workflow/    # Workflow engine and orchestrator
-├── docs/                    # Concepts, tools, channels, and design notes
-└── tests/                   # Pytest test suite
+鈹溾攢鈹€ app/uniclaw/api/         # REST, SSE, WebSocket, gateway orchestration
+鈹溾攢鈹€ app/uniclaw/agent/       # Agent runner, routing, streaming, prompt building
+鈹溾攢鈹€ app/uniclaw/channels/    # Channel adapters and registries
+鈹溾攢鈹€ app/uniclaw/core/        # Config, execution context, provider registry
+鈹溾攢鈹€ app/uniclaw/memory/      # Memory manager and retrieval
+鈹溾攢鈹€ app/uniclaw/session/     # Session context, queue, and manager
+鈹溾攢鈹€ app/uniclaw/skills/      # Skill loading and registry
+鈹溾攢鈹€ app/uniclaw/tools/       # Built-in tools and tool catalog
+鈹溾攢鈹€ app/uniclaw/workflow/    # Workflow engine and orchestrator
+鈹溾攢鈹€ docs/                    # Concepts, tools, channels, and design notes
+鈹斺攢鈹€ tests/                   # Pytest test suite
 ```
 
 ## Quick Start
@@ -214,3 +214,4 @@ If you are integrating UniClaw into a host service, start by wiring the API laye
 - [Tooling Documentation](docs/tools/index.md)
 - [Channel Documentation](docs/channels/index.md)
 - [Automation Documentation](docs/automation/webhook.md)
+

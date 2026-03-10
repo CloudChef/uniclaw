@@ -30,6 +30,10 @@ from app.uniclaw.tools.catalog import ToolProfile
 from app.uniclaw.agent.runner import AgentRunner
 from app.uniclaw.agent.prompt_builder import PromptBuilder, PromptBuilderConfig
 from app.uniclaw.core.config import get_config
+from app.uniclaw.core.provider_registry import ServiceProviderRegistry
+
+
+_global_provider_registry: Optional[ServiceProviderRegistry] = None
 
 
 # Global context components
@@ -42,12 +46,24 @@ _agent_runner: Optional[AgentRunner] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup and shutdown."""
-    global _session_manager, _session_queue, _skill_registry, _agent_runner
+    global _session_manager, _session_queue, _skill_registry, _agent_runner, _global_provider_registry
     
-    # Initialize components on startup
-    _session_manager = SessionManager()
+    config = get_config()
+    
+    _session_manager = SessionManager(agents_dir=config.agents_dir)
     _session_queue = SessionQueue()
     _skill_registry = SkillRegistry()
+    
+    _global_provider_registry = ServiceProviderRegistry()
+    if config.service_providers:
+        _global_provider_registry.load_instances_from_config(config.service_providers)
+    
+    available_providers = {}
+    provider_instances = _global_provider_registry.get_all_instance_configs()
+    for provider_type in _global_provider_registry.list_providers():
+        instances = _global_provider_registry.list_instances(provider_type)
+        if instances:
+            available_providers[provider_type] = instances
     
     # Register built-in tools (exec, read, write, web_search, etc.)
     registered_tools = register_builtin_tools(_skill_registry, profile=ToolProfile.FULL)
@@ -73,8 +89,6 @@ async def lifespan(app: FastAPI):
     if user_skills.exists():
         _skill_registry.load_from_directory(str(user_skills), location="user")
     
-    # Create PydanticAI Agent and AgentRunner
-    config = get_config()
     model_name = config.model.primary
     
     # Resolve model provider config from uniclaw.json
@@ -150,12 +164,14 @@ async def lifespan(app: FastAPI):
     
     print(f"[UniClaw] Agent created with model: {pydantic_model}")
     
-    # Set API context
     api_context = APIContext(
         session_manager=_session_manager,
         session_queue=_session_queue,
         skill_registry=_skill_registry,
         agent_runner=_agent_runner,
+        service_provider_registry=_global_provider_registry,
+        available_providers=available_providers,
+        provider_instances=provider_instances,
     )
     set_api_context(api_context)
     

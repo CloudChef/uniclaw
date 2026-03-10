@@ -339,18 +339,37 @@ from Skills(executable *.py + MD Skills)
         
         count = 0
         # ---- executable Skills(*.py) ----
-        for file_path in path.glob("*.py"):
+        # Search recursively for skill directories containing scripts/
+        for file_path in path.rglob("*.py"):
             if file_path.name.startswith("_"):
+                continue
+            # Only load from scripts/ subdirectories (skill package structure)
+            if "scripts" not in str(file_path):
                 continue
             
             try:
                 import importlib.util
+                import sys
+                
+                # Add the parent directory to sys.path for absolute imports
+                # This allows scripts to import from app.uniclaw
+                parent_dir = file_path.parent.parent.parent.parent.parent  # Go up to app/
+                if str(parent_dir) not in sys.path:
+                    sys.path.insert(0, str(parent_dir))
+                
+                # Also add the scripts directory for local imports
+                scripts_dir = file_path.parent
+                if str(scripts_dir) not in sys.path:
+                    sys.path.insert(0, str(scripts_dir))
+                
                 spec = importlib.util.spec_from_file_location(
-                    file_path.stem,
+                    f"skill_{file_path.stem}",
                     file_path,
                 )
                 if spec and spec.loader:
                     module = importlib.util.module_from_spec(spec)
+                    # Set __package__ to allow relative imports within the module
+                    module.__package__ = f"skill_{file_path.stem}"
                     spec.loader.exec_module(module)
                     
                     if hasattr(module, "SKILL_METADATA") and hasattr(module, "handler"):

@@ -149,7 +149,6 @@ class CompactRequest(BaseModel):
 class APIContext:
     """
 
-
 API context
  
  contains inject.
@@ -161,6 +160,9 @@ API context
     memory_manager: Optional[MemoryManager] = None
     sse_manager: Optional[SSEManager] = None
     agent_runner: Optional[Any] = None  # AgentRunner instance
+    service_provider_registry: Optional[Any] = None  # ServiceProviderRegistry instance
+    available_providers: dict[str, list[str]] = None
+    provider_instances: dict[str, dict[str, dict[str, Any]]] = None
     
     # run
     active_runs: dict[str, dict[str, Any]] = None
@@ -170,6 +172,10 @@ API context
             self.active_runs = {}
         if self.sse_manager is None:
             self.sse_manager = SSEManager()
+        if self.available_providers is None:
+            self.available_providers = {}
+        if self.provider_instances is None:
+            self.provider_instances = {}
 
 
 # context(apply)
@@ -231,7 +237,7 @@ async def _execute_agent_run(
             )
         
         # Build per-user scoped SessionManager and MemoryManager.
-        # Per spec §用户专属实例: each request gets managers scoped to
+        # Per spec 闂備礁婀遍崢褔宕愰崸妤€绠栧ù鐘差儏鎯熼梺鎸庢磵閸嬫捇鏌ｉ幘瀛樼闁宠棄顦甸獮妯尖偓娑櫭喊宥夋⒑濞茶浜濇い顓炴喘閸┾偓妞ゆ巻鍋撴繝鈧柆宥呯；婵☆垰鍚嬮? each request gets managers scoped to
         # auth_user.user_id, activating per-user path isolation (tasks 9.1/10.1).
         user_id = _user_info.user_id
         scoped_session_mgr = SessionManager(
@@ -252,8 +258,15 @@ async def _execute_agent_run(
             session_key=session_key,
             session_manager=scoped_session_mgr,
             memory_manager=scoped_memory_mgr,
+            extra={
+                "_service_provider_registry": ctx.service_provider_registry,
+                "available_providers": ctx.available_providers,
+                "provider_instances": ctx.provider_instances,
+                "skills_snapshot": ctx.skill_registry.snapshot(),
+                "md_skills_snapshot": ctx.skill_registry.md_snapshot(),
+            },
         )
-        
+
         async for event in ctx.agent_runner.run(
             session_key=session_key,
             user_message=message,
@@ -266,11 +279,12 @@ async def _execute_agent_run(
             elif event.type == "assistant":
                 ctx.sse_manager.push_assistant(run_id, event.content)
             elif event.type == "tool":
+                result_str = str(event.content) if event.content else None
                 ctx.sse_manager.push_tool(
                     run_id, 
                     event.tool, 
                     event.phase,
-                    result=event.content if event.content else None
+                    result=result_str
                 )
             elif event.type == "error":
                 ctx.sse_manager.push_error(run_id, event.error)
