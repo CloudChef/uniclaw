@@ -420,7 +420,7 @@ class TestJiraAgentE2E:
         session_key = session_data["session_key"]
         print(f"\n  Created session: {session_key}")
 
-        user_prompt = "璇峰湪Jira鐨凾EST椤圭洰涓垱寤轰竴涓狟ug绫诲瀷鐨刬ssue锛屾爣棰樻槸'鏈嶅姟鍚姩澶辫触'锛屾弿杩版槸'鏈嶅姟鍦ㄥ惎鍔ㄦ椂閬囧埌鏁版嵁搴撹繛鎺ヨ秴鏃堕敊璇紝瀵艰嚧鏃犳硶姝ｅ父鍚姩銆傞敊璇彂鐢熷湪2024骞?鏈?5鏃ヤ笂鍗?0鐐广€?"
+        user_prompt = "请在Jira的SLSC项目中创建一个Task类型的issue，标题是'服务启动失败'，描述是'服务在启动时遇到数据库连接超时错误'"
         
         run_resp = api_client.post(
             "/api/agent/run",

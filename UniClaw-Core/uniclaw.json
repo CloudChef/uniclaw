@@ -6,7 +6,7 @@
     "providers": {
       "deepseek": {
         "base_url": "https://api.deepseek.com",
-        "api_key": "sk-479dcbd6849b4f7bbd93255f537c7ffb",
+        "api_key": "",
         "api_type": "openai"
       }
     }
@@ -15,8 +15,8 @@
     "jira": {
       "dev": {
         "base_url": "http://192.168.1.107:8080/",
-        "username": "gang.wu",
-        "password": "Loveqq123",
+        "username": "",
+        "password": "",
         "api_version": "2",
         "default_project": "TEST"
       }
