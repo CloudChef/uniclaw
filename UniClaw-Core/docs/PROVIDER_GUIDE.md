@@ -560,32 +560,305 @@ Should document:
 
 ---
 
-## Deployment
+## Provider Deployment and Loading
 
-### Provider Distribution
+### Provider Locations
 
-#### Built-in Providers
+Providers can be deployed to multiple locations:
+
+#### 1. Built-in Providers
+
+**Location**: `app/uniclaw/providers/<provider-name>/`
+
+**Characteristics**:
+- Shipped with UniClaw Core
+- Core integrations (Jira, etc.)
+- Updated with Core releases
+- Always available
+
+**Use Case**: Essential system integrations maintained by the Core team.
+
+#### 2. Workspace Providers
+
+**Location**: `{workspace}/providers/<provider-name>/`
+
+**Characteristics**:
+- Project-specific integrations
+- Overrides built-in Providers
+- Custom business logic
+- Version controlled with project
+
+**Use Case**: Custom Provider for a specific project or organization.
+
+#### 3. User Providers
+
+**Location**: `~/.uniclaw/providers/<provider-name>/`
+
+**Characteristics**:
+- User-specific across all workspaces
+- Personal integrations
+- Survives workspace changes
+
+**Use Case**: Personal or experimental Providers.
+
+### Provider Discovery and Loading
+
+#### Discovery Process
+
+UniClaw discovers Providers through this process:
+
+1. **Search Path Resolution**
+   - Scan built-in Providers directory
+   - Scan workspace Providers directory
+   - Scan user Providers directory
+
+2. **Provider Detection**
+   - Look for `PROVIDER.md` in each subdirectory
+   - Parse Provider metadata
+   - Validate required fields
+
+3. **Skill Discovery**
+   - Scan `skills/` subdirectory
+   - Load each Skill's `SKILL.md`
+   - Register Skills to Agent
+
+#### Loading Mechanism
+
+**Startup Loading**:
+1. Clear Provider registry
+2. Scan all Provider locations
+3. Load Provider metadata
+4. Discover and load Skills
+5. Register Skills to Agent
+6. Log loaded Providers and Skills
+
+**Dynamic Loading**:
+- File system watchers detect changes
+- New/modified Providers auto-reload
+- No restart required in development
+
+### Provider Configuration Loading
+
+#### Configuration Sources
+
+Provider configuration is loaded from `uniclaw.json`:
+
+```json
+{
+  "service_providers": {
+    "<provider-type>": {
+      "<instance-name>": {
+        "base_url": "...",
+        "username": "...",
+        "password": "..."
+      }
+    }
+  }
+}
+```
+
+#### Instance Registration
+
+Each configured instance becomes available to the Agent:
+- Instance name is displayed to users
+- Credentials are injected at runtime
+- Multiple instances per Provider type
+
+### Deployment Process
+
+#### Step 1: Create Provider Directory
+
+Create the Provider structure:
+
+```
+providers/my-provider/
+├── PROVIDER.md
+├── README.md
+└── skills/
+    └── my-skill/
+        ├── SKILL.md
+        └── scripts/
+            └── handler.py
+```
+
+#### Step 2: Write Documentation
+
+Create `PROVIDER.md` with:
+- Provider metadata
+- Supported versions
+- Authentication methods
+- Available Skills
+
+#### Step 3: Implement Skills
+
+Create Skills following the [Skill Development Guide](./SKILL_GUIDE.md).
+
+#### Step 4: Configure Instance
+
+Add to `uniclaw.json`:
+
+```json
+{
+  "service_providers": {
+    "my-provider": {
+      "production": {
+        "base_url": "https://api.example.com",
+        "api_key": "${API_KEY}"
+      }
+    }
+  }
+}
+```
+
+#### Step 5: Deploy Provider
+
+Copy Provider directory to target location:
+- Built-in: `app/uniclaw/providers/`
+- Workspace: `{workspace}/providers/`
+- User: `~/.uniclaw/providers/`
+
+#### Step 6: Verify Loading
+
+1. Restart UniClaw (or trigger reload)
+2. Check logs for Provider loading
+3. Query `/api/skills` endpoint
+4. Test Provider functionality
+
+### Verification
+
+#### Check Provider Loading
+
+Review application logs:
+```
+[UniClaw] Provider loaded: my-provider
+[UniClaw] Skills loaded: 3 from my-provider
+```
+
+#### List Available Skills
+
+```bash
+curl http://localhost:8000/api/skills | grep my-provider
+```
+
+#### Test Provider
+
+```bash
+# List configured instances
+curl http://localhost:8000/api/providers/my-provider/instances
+
+# Execute a Skill
+curl -X POST http://localhost:8000/api/skills/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "skill": "my-provider/my-skill",
+    "params": {...}
+  }'
+```
+
+### Hot Reloading
+
+In development mode:
+- Changes to `PROVIDER.md` trigger reload
+- Changes to Skills trigger reload
+- Configuration changes trigger reload
+- No restart required
+
+### Troubleshooting Deployment
+
+#### Provider Not Loading
+
+**Symptoms**: Provider not appearing in API
+
+**Check**:
+1. `PROVIDER.md` exists and is valid
+2. Directory is in correct location
+3. File permissions are correct
+4. No syntax errors in metadata
+
+#### Skills Not Registered
+
+**Symptoms**: Provider loads but Skills missing
+
+**Check**:
+1. `SKILL.md` exists in each Skill directory
+2. Skill frontmatter is valid
+3. Handler file exists (for executable Skills)
+4. Check logs for parsing errors
+
+#### Configuration Not Found
+
+**Symptoms**: Provider loads but no instances available
+
+**Check**:
+1. `uniclaw.json` has Provider configuration
+2. Instance name is correct
+3. Environment variables are set
+4. Configuration syntax is valid
+
+---
+
+## Deployment Environments
+
+### Development
+
+**Characteristics**:
+- Local configuration files
+- Environment variables in `.env`
+- Hot reloading enabled
+- Debug logging
+
+**Best Practices**:
+- Use test instances
+- Keep credentials in `.env`
+- Enable verbose logging
+- Use workspace Providers
+
+### Staging
+
+**Characteristics**:
+- Production-like environment
+- Integration testing
+- Performance validation
+- Shared configuration
+
+**Best Practices**:
+- Mirror production setup
+- Use staging instances
+- Test all Skills
+- Validate error handling
+
+### Production
+
+**Characteristics**:
+- High availability
+- Secure credential storage
+- Monitoring and alerting
+- Backup and recovery
+
+**Best Practices**:
+- Use secret management (Vault, etc.)
+- Enable audit logging
+- Monitor performance
+- Regular security updates
+
+---
+
+## Provider Distribution
+
+### Built-in Providers
 - Included in UniClaw Core
 - Auto-discovered at startup
 - Updated with Core releases
 
-#### Custom Providers
+### Custom Providers
 - Placed in workspace directory
 - Loaded dynamically
 - Independent versioning
 
-### Configuration Deployment
-
-#### Development
-- Local configuration files
-- Environment variables
-- Test instances
-
-#### Production
-- Secure credential storage
-- Environment-specific configs
-- Monitoring and logging
-- Backup and recovery
+### Third-Party Providers
+- Distributed as packages
+- Installed via pip or manual
+- Registered in configuration
 
 ---
 
