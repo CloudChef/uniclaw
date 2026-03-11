@@ -1,14 +1,17 @@
 """
 List available resource pools for a given business group.
 
-Usage:
+Usage (positional - preferred):
   python list_resource_pools.py <BUSINESS_GROUP_ID> <SOURCE_KEY> <NODE_TYPE>
 
+Usage (named - also supported):
+  python list_resource_pools.py --business-group-id <ID> --source-key <KEY> [--node-type <TYPE>]
+
+Arguments:
   BUSINESS_GROUP_ID - from list_business_groups.py output
   SOURCE_KEY        - from list_services.py output (the sourceKey field)
   NODE_TYPE         - from list_components.py output (the typeName field).
-                      Always pass this argument. Use empty string "" if not available;
-                      empty value means the nodeType filter is skipped.
+                      Pass empty string "" or omit if not available.
 
 Output blocks:
   ##RESOURCE_POOL_META_START## ... ##RESOURCE_POOL_META_END##
@@ -22,7 +25,7 @@ Environment:
   CMP_URL    - Base URL, e.g. https://<host>/platform-api
   CMP_COOKIE - Session cookie string
 """
-import requests, urllib3, sys, os, json
+import requests, urllib3, sys, os, json, argparse
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 BASE_URL = os.environ.get("CMP_URL", "")
@@ -33,14 +36,31 @@ if not BASE_URL or not COOKIE:
     print('  $env:CMP_COOKIE = "<full cookie string>"')
     sys.exit(1)
 
-if len(sys.argv) < 3:
-    print("Usage: python list_resource_pools.py <BUSINESS_GROUP_ID> <SOURCE_KEY> <NODE_TYPE>")
-    sys.exit(1)
+# ── Parse arguments (support both positional and named) ──────────────────────
+def parse_args():
+    # Check if using named args (any arg starts with --)
+    has_named = any(arg.startswith('--') for arg in sys.argv[1:])
+    
+    if has_named:
+        parser = argparse.ArgumentParser(description='List resource pools')
+        parser.add_argument('--business-group-id', '-b', required=True, help='Business group ID')
+        parser.add_argument('--source-key', '-s', required=True, help='Source key (componentType)')
+        parser.add_argument('--node-type', '-n', default='', help='Node type (optional)')
+        args = parser.parse_args()
+        return args.business_group_id, args.source_key, args.node_type.strip()
+    else:
+        # Positional arguments
+        if len(sys.argv) < 3:
+            print("Usage: python list_resource_pools.py <BUSINESS_GROUP_ID> <SOURCE_KEY> [NODE_TYPE]")
+            print("   or: python list_resource_pools.py --business-group-id <ID> --source-key <KEY> [--node-type <TYPE>]")
+            sys.exit(1)
+        bg_id      = sys.argv[1]
+        source_key = sys.argv[2]
+        node_type  = sys.argv[3].strip() if len(sys.argv) > 3 else ""
+        return bg_id, source_key, node_type
 
-bg_id      = sys.argv[1]
-source_key = sys.argv[2]
-node_type  = sys.argv[3].strip() if len(sys.argv) > 3 else ""
-headers    = {"Content-Type": "application/json; charset=utf-8", "Cookie": COOKIE}
+bg_id, source_key, node_type = parse_args()
+headers = {"Content-Type": "application/json; charset=utf-8", "Cookie": COOKIE}
 
 # ── Query resource pools ──────────────────────────────────────────────────────
 url = f"{BASE_URL}/resource-bundles"
@@ -91,8 +111,7 @@ for i, rb in enumerate(items):
         print(f"      CloudEntryTypeId: {cloud_entry_type_id}")
     print()
 
-# Compact META block — agent reads this to get cloudEntryTypeId for the selected pool
-# Format: [{"index": 1, "id": "...", "name": "...", "cloudEntryTypeId": "..."}]
+# ── META block FIRST (agent reads immediately) ────────────────────────────────
 meta = [
     {
         "index":            i + 1,
@@ -106,7 +125,7 @@ print("##RESOURCE_POOL_META_START##")
 print(json.dumps(meta, ensure_ascii=False))
 print("##RESOURCE_POOL_META_END##")
 
-# Full RAW block — use only when extra fields beyond META are needed
+# ── RAW block (use only when extra fields beyond META are needed) ─────────────
 print("##RESOURCE_POOL_RAW_START##")
 print(json.dumps(items, ensure_ascii=False))
 print("##RESOURCE_POOL_RAW_END##")
