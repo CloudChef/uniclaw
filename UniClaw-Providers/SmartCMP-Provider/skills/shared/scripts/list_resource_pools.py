@@ -1,31 +1,32 @@
-"""
-List available resource pools for a given business group.
+"""List available resource pools for a given business group.
 
-Usage (positional - preferred):
+Usage:
   python list_resource_pools.py <BUSINESS_GROUP_ID> <SOURCE_KEY> <NODE_TYPE>
 
-Usage (named - also supported):
-  python list_resource_pools.py --business-group-id <ID> --source-key <KEY> [--node-type <TYPE>]
+  ARG1 = businessGroupId   (from list_business_groups.py, e.g. 47673d8d-6b3f-41e1-8ec0-...)
+  ARG2 = sourceKey         (from list_services.py, e.g. resource.iaas.machine.instance.abstract)
+  ARG3 = nodeType          (from list_components.py typeName, e.g. cloudchef.nodes.Compute)
 
-Arguments:
-  BUSINESS_GROUP_ID - from list_business_groups.py output
-  SOURCE_KEY        - from list_services.py output (the sourceKey field)
-  NODE_TYPE         - from list_components.py output (the typeName field).
-                      Pass empty string "" or omit if not available.
+  ❌ WRONG: list_resource_pools.py <catalogId> <businessGroupId>
+  ✓ RIGHT:  list_resource_pools.py <businessGroupId> <sourceKey> <nodeType>
 
-Output blocks:
-  ##RESOURCE_POOL_META_START## ... ##RESOURCE_POOL_META_END##
-    JSON array of {index, id, name, cloudEntryTypeId} for each pool.
-    Use this block to look up cloudEntryTypeId by the pool number the user selected.
-
-  ##RESOURCE_POOL_RAW_START## ... ##RESOURCE_POOL_RAW_END##
-    Full raw JSON array. Use only when extra fields beyond META are needed.
+Output:
+  - Numbered list of resource pool names (user-visible)
+  - ##RESOURCE_POOL_META_START## ... ##RESOURCE_POOL_META_END##
+      JSON array: [{index, id, name, cloudEntryTypeId}, ...]
+      Parse silently — do NOT display to user.
+  - ##RESOURCE_POOL_RAW_START## ... ##RESOURCE_POOL_RAW_END##
+      Full JSON response (use only when extra fields beyond META are needed)
 
 Environment:
   CMP_URL    - Base URL, e.g. https://<host>/platform-api
   CMP_COOKIE - Session cookie string
+
+API Reference:
+  GET /resource-bundles?businessGroupId=xxx&componentType=xxx&nodeType=xxx
+      &cloudEntryTypeId=&enabled=true&readOnly=false&strategy=RB_POLICY_STATIC
 """
-import requests, urllib3, sys, os, json, argparse
+import requests, urllib3, sys, os, json
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 BASE_URL = os.environ.get("CMP_URL", "")
@@ -36,51 +37,42 @@ if not BASE_URL or not COOKIE:
     print('  $env:CMP_COOKIE = "<full cookie string>"')
     sys.exit(1)
 
-# ── Parse arguments (support both positional and named) ──────────────────────
-def parse_args():
-    # Check if using named args (any arg starts with --)
-    has_named = any(arg.startswith('--') for arg in sys.argv[1:])
-    
-    if has_named:
-        parser = argparse.ArgumentParser(description='List resource pools')
-        parser.add_argument('--business-group-id', '-b', required=True, help='Business group ID')
-        parser.add_argument('--source-key', '-s', required=True, help='Source key (componentType)')
-        parser.add_argument('--node-type', '-n', default='', help='Node type (optional)')
-        args = parser.parse_args()
-        return args.business_group_id, args.source_key, args.node_type.strip()
-    else:
-        # Positional arguments
-        if len(sys.argv) < 3:
-            print("Usage: python list_resource_pools.py <BUSINESS_GROUP_ID> <SOURCE_KEY> [NODE_TYPE]")
-            print("   or: python list_resource_pools.py --business-group-id <ID> --source-key <KEY> [--node-type <TYPE>]")
-            sys.exit(1)
-        bg_id      = sys.argv[1]
-        source_key = sys.argv[2]
-        node_type  = sys.argv[3].strip() if len(sys.argv) > 3 else ""
-        return bg_id, source_key, node_type
-
-bg_id, source_key, node_type = parse_args()
-
-# Warn if nodeType is missing (may cause incomplete results)
-if not node_type:
-    print("[WARNING] nodeType not provided. Results may be incomplete.")
-    print("         Get nodeType from: list_components.py <sourceKey> -> typeName")
+# ── Parse positional arguments (require exactly 3) ───────────────────────────
+if len(sys.argv) != 4:
+    print("[ERROR] This script requires EXACTLY 3 arguments:")
     print()
+    print("  python list_resource_pools.py <ARG1> <ARG2> <ARG3>")
+    print()
+    print("  ARG1 = businessGroupId   (from list_business_groups.py)")
+    print("  ARG2 = componentType     (sourceKey from list_services.py)")
+    print("  ARG3 = nodeType          (typeName from list_components.py)")
+    print()
+    print("Example:")
+    print("  python list_resource_pools.py \\")
+    print("    47673d8d-6b3f-41e1-8ec0-c37e082d9020 \\")
+    print("    resource.iaas.machine.instance.abstract \\")
+    print("    cloudchef.nodes.Compute")
+    sys.exit(1)
+
+bg_id         = sys.argv[1].strip()
+component_type = sys.argv[2].strip()
+node_type     = sys.argv[3].strip()
 
 headers = {"Content-Type": "application/json; charset=utf-8", "Cookie": COOKIE}
 
 # ── Query resource pools ──────────────────────────────────────────────────────
+# Required params: businessGroupId, componentType, nodeType
+# Other params keep default values as per platform UI
 url = f"{BASE_URL}/resource-bundles"
 params = {
     "businessGroupId":  bg_id,
-    "componentType":    source_key,
+    "componentType":    component_type,
+    "nodeType":         node_type,
     "cloudEntryTypeId": "",
     "enabled":          "true",
     "readOnly":         "false",
     "strategy":         "RB_POLICY_STATIC",
 }
-if node_type:
-    params["nodeType"] = node_type
 
 try:
     resp = requests.get(url, headers=headers, params=params, verify=False, timeout=30)
@@ -90,6 +82,7 @@ except requests.exceptions.RequestException as e:
     print(f"[ERROR] Request failed: {e}")
     sys.exit(1)
 
+# ── Extract list from response ────────────────────────────────────────────────
 def _extract_list(d):
     if isinstance(d, list):
         return d
@@ -101,24 +94,17 @@ def _extract_list(d):
 items = _extract_list(data) if isinstance(data, dict) else (data if isinstance(data, list) else [])
 
 if not items:
-    print("\nNo resource pools found for this business group.")
+    print("No resource pools found for this business group.")
     sys.exit(0)
 
-print(f"\nFound {len(items)} resource pool(s):\n")
+# ── User-visible list (name only) ─────────────────────────────────────────────
+print(f"Found {len(items)} resource pool(s):\n")
 for i, rb in enumerate(items):
-    name                = rb.get("name", "N/A")
-    rid                 = rb.get("id", "N/A")
-    cloud_type          = rb.get("cloudEntryType", rb.get("cloudEntryTypeName", rb.get("type", "")))
-    cloud_entry_type_id = rb.get("cloudEntryTypeId", "")
+    name = rb.get("name", "N/A")
     print(f"  [{i+1}] {name}")
-    print(f"      ID: {rid}")
-    if cloud_type:
-        print(f"      Cloud Type: {cloud_type}")
-    if cloud_entry_type_id:
-        print(f"      CloudEntryTypeId: {cloud_entry_type_id}")
-    print()
+print()
 
-# ── META block FIRST (agent reads immediately) ────────────────────────────────
+# ── META block (agent reads silently, do NOT display to user) ─────────────────
 meta = [
     {
         "index":            i + 1,
@@ -132,7 +118,19 @@ print("##RESOURCE_POOL_META_START##")
 print(json.dumps(meta, ensure_ascii=False))
 print("##RESOURCE_POOL_META_END##")
 
-# ── RAW block (use only when extra fields beyond META are needed) ─────────────
+# ── RAW block (simplified - only essential fields to reduce output size) ─────
+# Full response can be extremely large due to nested network/storage data
+raw_simplified = [
+    {
+        "id":               rb.get("id", ""),
+        "name":             rb.get("name", ""),
+        "cloudEntryTypeId": rb.get("cloudEntryTypeId", ""),
+        "cloudEntryType":   rb.get("cloudEntryType", ""),
+        "enabled":          rb.get("enabled", True),
+        "readOnly":         rb.get("readOnly", False),
+    }
+    for rb in items
+]
 print("##RESOURCE_POOL_RAW_START##")
-print(json.dumps(items, ensure_ascii=False))
+print(json.dumps(raw_simplified, ensure_ascii=False))
 print("##RESOURCE_POOL_RAW_END##")

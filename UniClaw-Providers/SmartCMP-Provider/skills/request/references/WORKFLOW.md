@@ -120,34 +120,43 @@ STOP → RECORD: projectId, projectName
 
 #### 3d — Resource pool
 
-**IMPORTANT: nodeType is REQUIRED for correct resource pool filtering.**
+**⚠️ CRITICAL: This script requires EXACTLY 3 arguments in THIS ORDER:**
 
 ```
-REQUIRED INPUTS:
-  bgId      ← from Step 3b (businessGroupId)
-  sourceKey ← from Step 1a cache (##CATALOG_META##)
-  nodeType  ← from Step 1b cache (typeName from ##COMPONENT_META##)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  python list_resource_pools.py <ARG1> <ARG2> <ARG3>                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ARG1 = businessGroupId   ← from Step 3b (e.g. 47673d8d-6b3f-41e1-8ec0-...) │
+│  ARG2 = sourceKey         ← from Step 1a (e.g. resource.iaas.machine...)    │
+│  ARG3 = nodeType          ← from Step 1b (e.g. cloudchef.nodes.Compute)     │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-ACTION: python ../shared/scripts/list_resource_pools.py <bgId> <sourceKey> <nodeType>
+❌ WRONG: list_resource_pools.py <catalogId> <businessGroupId>
+✓ RIGHT:  list_resource_pools.py <businessGroupId> <sourceKey> <nodeType>
+```
 
-Example:
-  python ../shared/scripts/list_resource_pools.py \
-    47673d8d-6b3f-41e1-8ec0-c37e082d9020 \
-    resource.iaas.machine.instance.abstract \
-    cloudchef.nodes.Compute
+**Complete example:**
+```bash
+python ../shared/scripts/list_resource_pools.py \
+  47673d8d-6b3f-41e1-8ec0-c37e082d9020 \
+  resource.iaas.machine.instance.abstract \
+  cloudchef.nodes.Compute
+```
 
-Or with named args:
-  python ../shared/scripts/list_resource_pools.py \
-    --business-group-id 47673d8d-... \
-    --source-key resource.iaas.machine.instance.abstract \
-    --node-type cloudchef.nodes.Compute
+**Where to get each value:**
+| Argument | Source | Example Value |
+|----------|--------|---------------|
+| ARG1 businessGroupId | Step 3b selection → `##BG_META##["id"]` | `47673d8d-6b3f-41e1-8ec0-c37e082d9020` |
+| ARG2 sourceKey | Step 1a cache → `##CATALOG_META##["sourceKey"]` | `resource.iaas.machine.instance.abstract` |
+| ARG3 nodeType | Step 1b cache → `##COMPONENT_META##["typeName"]` | `cloudchef.nodes.Compute` |
 
+```
 SHOW: numbered list
 ASK:  "请选择资源池："
 STOP → RECORD: resourceBundleId, resourceBundleName, cloudEntryTypeId
 ```
 
-> **WARNING**: If nodeType is omitted, the API may return incomplete results or wrong resource pools.
+> **WARNING**: If ANY argument is wrong or missing, the API will return wrong results.
 
 #### 3e — OS template *(VM only)*
 
