@@ -62,7 +62,7 @@ export function createStreamHandler(runId, callbacks = {}) {
 
         eventSource.addEventListener(EventTypes.LIFECYCLE, (e) => {
             const data = parseEventData(e.data);
-            console.log('[Stream] Lifecycle:', data.phase);
+            console.log('[Stream] Lifecycle:', data.phase, data);
 
             if (data.phase === 'start') {
                 onStart(data);
@@ -77,11 +77,16 @@ export function createStreamHandler(runId, callbacks = {}) {
 
         eventSource.addEventListener(EventTypes.ASSISTANT, (e) => {
             const data = parseEventData(e.data);
-            onDelta({ content: data.text, is_delta: data.is_delta });
+            console.log('[Stream] Assistant event:', data);
+            // Backend sends { text: string, is_delta: boolean }
+            // Frontend expects { content: string, is_delta: boolean }
+            onDelta({ content: data.text || data.content, is_delta: data.is_delta });
         });
 
         eventSource.addEventListener(EventTypes.TOOL, (e) => {
             const data = parseEventData(e.data);
+            console.log('[Stream] Tool event:', data);
+            // Backend sends { tool: string, phase: string, result?: string }
             if (data.phase === 'start') {
                 onToolStart({ tool_name: data.tool });
             } else if (data.phase === 'end') {

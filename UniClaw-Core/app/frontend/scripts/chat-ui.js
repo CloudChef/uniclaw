@@ -18,24 +18,14 @@ let currentStreamHandler = null;
 export async function initChat(element) {
     chatElement = element;
 
-    // Ensure session is initialized
     await initSession();
-
-    // Configure connection
     configureChatConnection(element);
-
-    // Configure interceptors
     configureInterceptors(element);
-
-    // Configure i18n attributes
     configureI18nAttributes(element);
 
     console.log('[ChatUI] Initialized');
 }
 
-/**
- * Configure chat connection
- */
 function configureChatConnection(element) {
     element.connect = {
         url: buildApiUrl('/api/agent/run'),
@@ -50,9 +40,6 @@ function configureChatConnection(element) {
     }
 }
 
-/**
- * Configure request and response interceptors
- */
 function configureInterceptors(element) {
     element.requestInterceptor = async (request) => {
         console.log('[ChatUI] Request intercepted:', request);
@@ -116,9 +103,6 @@ function parseResponseBody(raw) {
     }
 }
 
-/**
- * Configure i18n attributes
- */
 function configureI18nAttributes(element) {
     if (!isLocaleLoaded()) {
         console.warn('[ChatUI] Locale not loaded, skipping i18n config');
@@ -147,9 +131,6 @@ function configureI18nAttributes(element) {
     };
 }
 
-/**
- * Extract message text from request body
- */
 function extractMessageText(body) {
     if (!body) return '';
 
@@ -169,9 +150,6 @@ function extractMessageText(body) {
     return '';
 }
 
-/**
- * Handle streaming response
- */
 async function handleStreamingResponse(runId) {
     console.log('[ChatUI] Handling streaming response for run:', runId);
 
@@ -192,13 +170,11 @@ async function handleStreamingResponse(runId) {
                 console.log('[ChatUI] Stream started');
             },
             onDelta: (data) => {
-                if (data.content) {
-                    aiMessageContent += data.content;
-                    if (canUpdateMessage) {
-                        updateAiMessage(aiMessageContent, aiMessageIndex, canUpdateMessage);
-                        hasRenderedDelta = true;
-                    }
-                }
+                if (!data.content) return;
+
+                aiMessageContent += data.content;
+                updateAiMessage(aiMessageContent, aiMessageIndex);
+                hasRenderedDelta = true;
             },
             onToolStart: (data) => {
                 console.log('[ChatUI] Tool start:', data.tool_name);
@@ -228,19 +204,17 @@ async function handleStreamingResponse(runId) {
 
 function appendErrorMessage(message) {
     if (!chatElement) return;
+
     if (typeof chatElement.addErrorMessage === 'function') {
         chatElement.addErrorMessage(message);
         return;
     }
+
     chatElement.addMessage({ text: `Error: ${message}`, role: 'ai' });
 }
 
-/**
- * Update AI message (streaming)
- */
-function updateAiMessage(content, messageIndex, canUpdateMessage) {
+function updateAiMessage(content, messageIndex) {
     if (!chatElement) return;
-    if (!canUpdateMessage) return;
 
     if (messageIndex !== null) {
         try {
@@ -250,11 +224,15 @@ function updateAiMessage(content, messageIndex, canUpdateMessage) {
             // fallback below
         }
     }
+
+    // DeepChat versions without updateMessage can still stream via overwrite mode.
+    try {
+        chatElement.addMessage({ text: content, role: 'ai', overwrite: true });
+    } catch {
+        // fallback handled at finalize
+    }
 }
 
-/**
- * Finalize AI message
- */
 function finalizeAiMessage(content, messageIndex, canUpdateMessage, hasRenderedDelta) {
     if (!chatElement) return;
 
@@ -274,23 +252,14 @@ function finalizeAiMessage(content, messageIndex, canUpdateMessage, hasRenderedD
     chatElement.addMessage({ text: content, role: 'ai' });
 }
 
-/**
- * Show tool execution indicator
- */
 function showToolIndicator(toolName) {
     console.log('[ChatUI] Executing tool:', toolName);
 }
 
-/**
- * Hide tool indicator
- */
 function hideToolIndicator() {
     // Hide loading indicator
 }
 
-/**
- * Abort current stream
- */
 export function abortCurrentStream() {
     if (currentStreamHandler) {
         currentStreamHandler.abort();
@@ -298,9 +267,6 @@ export function abortCurrentStream() {
     }
 }
 
-/**
- * Get DeepChat element
- */
 export function getChatElement() {
     return chatElement;
 }
