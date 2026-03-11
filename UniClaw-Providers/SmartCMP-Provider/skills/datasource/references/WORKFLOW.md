@@ -65,13 +65,27 @@ Output: `##COMPONENT_META##` block with `typeName` (= model.typeName).
 
 ### 4. List resource pools
 
+**IMPORTANT: nodeType is REQUIRED for correct filtering.**
+
 ```bash
 python ../shared/scripts/list_resource_pools.py <BG_ID> <SOURCE_KEY> <NODE_TYPE>
 ```
 
-- `NODE_TYPE` = `typeName` from step 3. Pass `""` if not found.
+- `BG_ID` = businessGroupId from step 2
+- `SOURCE_KEY` = sourceKey from step 1
+- `NODE_TYPE` = **typeName from step 3** (e.g. `cloudchef.nodes.Compute`)
+
+**Example:**
+```bash
+python ../shared/scripts/list_resource_pools.py \
+  47673d8d-6b3f-41e1-8ec0-c37e082d9020 \
+  resource.iaas.machine.instance.abstract \
+  cloudchef.nodes.Compute
+```
 
 Output: numbered list with `##RESOURCE_POOL_META##` block containing `cloudEntryTypeId`.
+
+> **WARNING**: If NODE_TYPE is omitted, the API may return incomplete or incorrect results.
 
 **Trigger**: "有哪些资源池" / "list resource pools"
 

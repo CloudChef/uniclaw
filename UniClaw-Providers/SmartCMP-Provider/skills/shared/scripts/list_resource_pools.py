@@ -60,6 +60,13 @@ def parse_args():
         return bg_id, source_key, node_type
 
 bg_id, source_key, node_type = parse_args()
+
+# Warn if nodeType is missing (may cause incomplete results)
+if not node_type:
+    print("[WARNING] nodeType not provided. Results may be incomplete.")
+    print("         Get nodeType from: list_components.py <sourceKey> -> typeName")
+    print()
+
 headers = {"Content-Type": "application/json; charset=utf-8", "Cookie": COOKIE}
 
 # ── Query resource pools ──────────────────────────────────────────────────────

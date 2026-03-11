@@ -74,7 +74,13 @@ $env:CMP_COOKIE = '<full cookie string>'
 
 ## Notes
 
+**CRITICAL RULES:**
+- **NEVER create temp files** — no `.py`, `.txt`, `.json`. Your context IS your memory.
+- **NEVER redirect output** — no `>`, `>>`, `2>&1`. Run scripts directly, read stdout.
+- **NEVER flatten request body** — VM fields MUST be inside `resourceSpecs[]` array.
+- **NEVER pass JSON as command-line string** in PowerShell — use `--file`.
+
+**General:**
 - Scripts read SmartCMP connection from environment variables (`CMP_URL`, `CMP_COOKIE`).
 - All `list_*.py` scripts are shared across skills (datasource, request).
 - Follow the workflow in [WORKFLOW.md](references/WORKFLOW.md) for correct execution order.
-- **NEVER** pass JSON as command-line string in PowerShell — use `--file` or inline Python.

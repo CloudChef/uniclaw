@@ -54,8 +54,15 @@ python ../shared/scripts/list_business_groups.py <catalogId>
 When user asks "what resource pools are available":
 
 ```bash
-# Need: bgId, sourceKey, nodeType (from list_components.py)
+# MUST have all 3 params: bgId, sourceKey, nodeType
+# nodeType comes from list_components.py output (typeName field)
 python ../shared/scripts/list_resource_pools.py <bgId> <sourceKey> <nodeType>
+
+# Example with actual values:
+python ../shared/scripts/list_resource_pools.py \
+  47673d8d-6b3f-41e1-8ec0-c37e082d9020 \
+  resource.iaas.machine.instance.abstract \
+  cloudchef.nodes.Compute
 ```
 
 ## Environment Setup

@@ -1,5 +1,65 @@
 # Request Body Examples
 
+## Canonical VM Example (vSphere)
+
+**This is the standard structure for VM requests. All VM types follow this pattern.**
+
+```json
+{
+  "name": "my-linux-vm",
+  "catalogName": "Linux VM",
+  "businessGroupName": "我的业务组150",
+  "userLoginId": "admin",
+  "resourceBundleName": "Vsphere资源池",
+  "resourceSpecs": [
+    {
+      "type": "cloudchef.nodes.Compute",
+      "node": "Compute",
+      "computeProfileName": "微型计算",
+      "cpu": 1,
+      "memory": 1,
+      "logicTemplateName": "CentOS",
+      "templateId": "vm-551",
+      "credentialUser": "root",
+      "credentialPassword": "P@ssw0rd365",
+      "networkId": "network-18963"
+    }
+  ]
+}
+```
+
+**Field sources:**
+- `name` ← user input
+- `catalogName` ← Step 1a selection
+- `businessGroupName` ← Step 3b selection
+- `resourceBundleName` ← Step 3d selection
+- `type` ← Step 1b `typeName`
+- `computeProfileName`, `cpu`, `memory`, `credentialUser`, `credentialPassword`, `networkId` ← instructions `default:xxx`
+- `logicTemplateName` ← Step 3e selection
+- `templateId` ← Step 3f selection (private cloud image ID)
+
+---
+
+## WRONG Structure (DO NOT USE)
+
+```json
+{
+  "catalogId": "BUILD-IN-CATALOG-LINUX-VM",
+  "name": "my-linux-vm",
+  "businessGroupId": "47673d8d-...",
+  "resourceBundleName": "Vsphere资源池",
+  "computeProfileName": "微型计算",
+  "logicTemplateName": "CentOS",
+  "templateId": "vm-551",
+  "cpu": 1,
+  "memory": 1
+}
+```
+
+**Why wrong:** All fields are flattened at top-level. VM-specific fields MUST be inside `resourceSpecs[]`.
+
+---
+
 ## Minimum (3 required fields)
 
 ```json

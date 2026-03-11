@@ -20,9 +20,17 @@ $env:CMP_COOKIE = '<full cookie string>'   # MUST use single quotes
 3. **NEVER run a script speculatively** — only when explicitly required.
 4. `[optional]` params with `list:` are **never auto-fetched**.
 5. **STOP and wait** after every user-facing output or question.
-6. **NEVER create temp `.py` files** or use `python -c` for covered tasks.
-7. **NEVER pipe, redirect, or filter script output** (no `|`, `>`, `2>&1`, `Select-String`).
+6. **NEVER create temp files** — no `.py`, `.txt`, `.json` temp files. Use ONLY existing scripts.
+7. **NEVER redirect output** — no `>`, `>>`, `2>&1`, `| tee`, `Out-File`. Run scripts directly.
 8. **`list_components.py` is called EXACTLY ONCE** — silently in Step 1b.
+9. **NEVER flatten request body** — VM fields MUST be inside `resourceSpecs[]` array.
+10. **Script output goes to YOUR CONTEXT** — you read stdout directly, no file needed.
+
+> **WHY NO TEMP FILES?**
+> - Script output contains `##BLOCK_START##...##BLOCK_END##` markers
+> - You parse these markers directly from stdout
+> - Your LLM context IS your memory — values persist across turns
+> - Files add latency and clutter with ZERO benefit
 
 ---
 
@@ -112,12 +120,34 @@ STOP → RECORD: projectId, projectName
 
 #### 3d — Resource pool
 
+**IMPORTANT: nodeType is REQUIRED for correct resource pool filtering.**
+
 ```
+REQUIRED INPUTS:
+  bgId      ← from Step 3b (businessGroupId)
+  sourceKey ← from Step 1a cache (##CATALOG_META##)
+  nodeType  ← from Step 1b cache (typeName from ##COMPONENT_META##)
+
 ACTION: python ../shared/scripts/list_resource_pools.py <bgId> <sourceKey> <nodeType>
+
+Example:
+  python ../shared/scripts/list_resource_pools.py \
+    47673d8d-6b3f-41e1-8ec0-c37e082d9020 \
+    resource.iaas.machine.instance.abstract \
+    cloudchef.nodes.Compute
+
+Or with named args:
+  python ../shared/scripts/list_resource_pools.py \
+    --business-group-id 47673d8d-... \
+    --source-key resource.iaas.machine.instance.abstract \
+    --node-type cloudchef.nodes.Compute
+
 SHOW: numbered list
 ASK:  "请选择资源池："
 STOP → RECORD: resourceBundleId, resourceBundleName, cloudEntryTypeId
 ```
+
+> **WARNING**: If nodeType is omitted, the API may return incomplete results or wrong resource pools.
 
 #### 3e — OS template *(VM only)*
 
@@ -145,13 +175,58 @@ STOP → RECORD: imageId, imageName
 
 ### Step 4 — Build and confirm request body
 
-1. Build complete JSON request body
-2. **Always output BOTH**:
-   - Human-readable summary table
-   - Complete raw JSON in code block
+**CRITICAL: Use the EXACT structure below. NEVER flatten fields.**
+
+```json
+{
+  "name": "<user-provided>",
+  "catalogName": "<from Step 1a>",
+  "businessGroupName": "<from Step 3b>",
+  "userLoginId": "admin",
+  "resourceBundleName": "<from Step 3d>",
+  "resourceSpecs": [
+    {
+      "type": "<from Step 1b: typeName>",
+      "node": "Compute",
+      "computeProfileName": "<from instructions default or user>",
+      "cpu": <number>,
+      "memory": <number in GB>,
+      "logicTemplateName": "<from Step 3e>",
+      "templateId": "<from Step 3f if private cloud>",
+      "credentialUser": "<from instructions default>",
+      "credentialPassword": "<from instructions default>",
+      "networkId": "<from instructions default>"
+    }
+  ]
+}
+```
+
+**Field placement rules:**
+
+| Location | Fields |
+|----------|--------|
+| **Top-level** | name, catalogName, businessGroupName, userLoginId, resourceBundleName |
+| **Inside resourceSpecs[]** | type, node, cpu, memory, computeProfileName, logicTemplateName, templateId, credentialUser, credentialPassword, networkId, systemDisk, dataDisks |
+
+**Where to get values:**
+
+| Field | Source |
+|-------|--------|
+| `type` | Step 1b `typeName` (e.g. `cloudchef.nodes.Compute`) |
+| `node` | Always `"Compute"` for VM |
+| `computeProfileName` | instructions `default:xxx` or user input |
+| `cpu`, `memory` | instructions `default:xxx` or user input |
+| `logicTemplateName` | Step 3e selection |
+| `templateId` | Step 3f selection (private cloud only) |
+| `credentialUser/Password` | instructions `default:xxx` |
+| `networkId` | instructions `default:xxx` |
+
+**Output format:**
+1. Human-readable summary table
+2. Complete raw JSON in code block (MUST match structure above)
 3. STOP → wait for user confirmation
 
-See [PARAMS.md](PARAMS.md) for field placement and [EXAMPLES.md](EXAMPLES.md) for samples.
+See [EXAMPLES.md](EXAMPLES.md) for complete samples.
 
 ---
 
